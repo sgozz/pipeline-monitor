@@ -50,8 +50,12 @@ export default function App() {
   useEffect(() => {
     window.api.updater.getStatus().then(setUpdateStatus)
     window.api.updater.onStatus((status) => {
-      setUpdateStatus(status as UpdateStatus)
-      setUpdateDismissed(false)
+      const s = status as UpdateStatus
+      setUpdateStatus(s)
+      // Only un-dismiss for actionable statuses (new download or ready to install)
+      if (s.status === 'downloading' || s.status === 'ready') {
+        setUpdateDismissed(false)
+      }
     })
   }, [])
 

@@ -116,27 +116,56 @@ export class JenkinsAPI {
     return 'Basic ' + Buffer.from(`${this.config.username}:${this.config.token}`).toString('base64')
   }
 
-  private async request<T>(path: string, options?: RequestInit): Promise<T> {
+  private async request<T>(
+    path: string,
+    options?: RequestInit & { conditionalHeaders?: { etag?: string; lastModified?: string } }
+  ): Promise<{ data: T; etag?: string; lastModified?: string; notModified: boolean }> {
     const url = `${this.baseUrl}${path}`
+    const headers: Record<string, string> = {
+      Authorization: this.authHeader,
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string>)
+    }
+
+    // Add conditional request headers if available
+    if (options?.conditionalHeaders?.etag) {
+      headers['If-None-Match'] = options.conditionalHeaders.etag
+    }
+    if (options?.conditionalHeaders?.lastModified) {
+      headers['If-Modified-Since'] = options.conditionalHeaders.lastModified
+    }
+
     const res = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: this.authHeader,
-        'Content-Type': 'application/json',
-        ...options?.headers
-      }
+      headers
     })
+
+    // 304 Not Modified — data hasn't changed
+    if (res.status === 304) {
+      return { data: undefined as unknown as T, notModified: true }
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
       throw new Error(`Jenkins API error: ${res.status} ${res.statusText} - ${text}`)
     }
 
+    const etag = res.headers.get('etag') || undefined
+    const lastModified = res.headers.get('last-modified') || undefined
     const contentType = res.headers.get('content-type') || ''
+
     if (contentType.includes('application/json')) {
-      return res.json() as Promise<T>
+      const data = (await res.json()) as T
+      return { data, etag, lastModified, notModified: false }
     }
-    return res.text() as unknown as T
+    const data = (await res.text()) as unknown as T
+    return { data, etag, lastModified, notModified: false }
+  }
+
+  /** Simple request that just returns the data (for non-cached calls) */
+  private async requestSimple<T>(path: string, options?: RequestInit): Promise<T> {
+    const result = await this.request<T>(path, options)
+    return result.data
   }
 
   private async post(path: string): Promise<void> {
@@ -156,7 +185,7 @@ export class JenkinsAPI {
   // ─── Items (Jobs) ─────────────────────────────────────────────
 
   async getAllItems(): Promise<JenkinsItem[]> {
-    const data = await this.request<{ jobs: JenkinsItem[] }>(
+    const data = await this.requestSimple<{ jobs: JenkinsItem[] }>(
       '/api/json?tree=jobs[name,url,color,fullName,lastBuild[number,url],jobs[name,url,color,fullName,lastBuild[number,url],jobs[name,url,color,fullName,lastBuild[number,url]]]]'
     )
     return this.flattenJobs(data.jobs || [])
@@ -180,11 +209,10 @@ export class JenkinsAPI {
   }
 
   async getItem(fullname: string): Promise<JenkinsItem> {
-    return this.request<JenkinsItem>(
+    return this.requestSimple<JenkinsItem>(
       `${fullnameToPath(fullname)}/api/json?tree=name,url,color,fullName,lastBuild[number,url],jobs[name,url,color,fullName,lastBuild[number,url]]`
     )
   }
-
   async queryItems(pattern: string): Promise<JenkinsItem[]> {
     const all = await this.getAllItems()
     const lower = pattern.toLowerCase()
@@ -198,13 +226,12 @@ export class JenkinsAPI {
 
   async getBuild(fullname: string, number?: number): Promise<JenkinsBuild> {
     const buildPath = number ? `/${number}` : '/lastBuild'
-    return this.request<JenkinsBuild>(
+    return this.requestSimple<JenkinsBuild>(
       `${fullnameToPath(fullname)}${buildPath}/api/json?tree=number,url,timestamp,duration,estimatedDuration,building,result,previousBuild[number,url],nextBuild[number,url]`
     )
   }
-
   async getBuildHistory(fullname: string, limit = 20): Promise<JenkinsBuild[]> {
-    const data = await this.request<{ builds: JenkinsBuild[] }>(
+    const data = await this.requestSimple<{ builds: JenkinsBuild[] }>(
       `${fullnameToPath(fullname)}/api/json?tree=builds[number,url,timestamp,duration,estimatedDuration,building,result]{0,${limit}}`
     )
     return data.builds || []
@@ -212,7 +239,7 @@ export class JenkinsAPI {
 
   async getConsoleOutput(fullname: string, number?: number): Promise<string> {
     const buildPath = number ? `/${number}` : '/lastBuild'
-    return this.request<string>(`${fullnameToPath(fullname)}${buildPath}/consoleText`)
+    return this.requestSimple<string>(`${fullnameToPath(fullname)}${buildPath}/consoleText`)
   }
 
   async getTestReport(
@@ -221,7 +248,7 @@ export class JenkinsAPI {
   ): Promise<Record<string, unknown> | null> {
     try {
       const buildPath = number ? `/${number}` : '/lastBuild'
-      return await this.request<Record<string, unknown>>(
+      return await this.requestSimple<Record<string, unknown>>(
         `${fullnameToPath(fullname)}${buildPath}/testReport/api/json`
       )
     } catch {
@@ -232,7 +259,7 @@ export class JenkinsAPI {
   async getStages(fullname: string, number?: number): Promise<JenkinsStage[]> {
     try {
       const buildPath = number ? `/${number}` : '/lastBuild'
-      const data = await this.request<JenkinsPipelineRun>(
+      const data = await this.requestSimple<JenkinsPipelineRun>(
         `${fullnameToPath(fullname)}${buildPath}/wfapi/describe`
       )
       return data.stages || []
@@ -293,7 +320,7 @@ export class JenkinsAPI {
   // ─── Nodes ────────────────────────────────────────────────────
 
   async getAllNodes(): Promise<JenkinsNode[]> {
-    const data = await this.request<{ computer: JenkinsNode[] }>(
+    const data = await this.requestSimple<{ computer: JenkinsNode[] }>(
       '/computer/api/json?tree=computer[displayName,offline,executors[currentExecutable[url,timestamp,number,fullDisplayName]]]'
     )
     return data.computer || []
@@ -301,15 +328,14 @@ export class JenkinsAPI {
 
   async getNode(name: string): Promise<JenkinsNode> {
     const encodedName = name === 'Built-In Node' ? '(built-in)' : encodeURIComponent(name)
-    return this.request<JenkinsNode>(
+    return this.requestSimple<JenkinsNode>(
       `/computer/${encodedName}/api/json?tree=displayName,offline,executors[currentExecutable[url,timestamp,number,fullDisplayName]]`
     )
   }
-
   // ─── Queue ────────────────────────────────────────────────────
 
   async getQueueItems(): Promise<JenkinsQueueItem[]> {
-    const data = await this.request<{ items: JenkinsQueueItem[] }>(
+    const data = await this.requestSimple<{ items: JenkinsQueueItem[] }>(
       '/queue/api/json?tree=items[id,inQueueSince,url,why,task[name,url,fullName]]'
     )
     return data.items || []
@@ -323,7 +349,7 @@ export class JenkinsAPI {
 
   async testConnection(): Promise<boolean> {
     try {
-      await this.request('/api/json?tree=mode')
+      await this.requestSimple('/api/json?tree=mode')
       return true
     } catch {
       return false

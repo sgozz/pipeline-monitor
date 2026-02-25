@@ -40,6 +40,20 @@ function createWindow(): void {
     }
   })
 
+  // Notify renderer when window visibility changes (for polling pause)
+  mainWindow.on('show', () => {
+    mainWindow?.webContents.send('app:visibility', true)
+  })
+  mainWindow.on('hide', () => {
+    mainWindow?.webContents.send('app:visibility', false)
+  })
+  mainWindow.on('minimize', () => {
+    mainWindow?.webContents.send('app:visibility', false)
+  })
+  mainWindow.on('restore', () => {
+    mainWindow?.webContents.send('app:visibility', true)
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }

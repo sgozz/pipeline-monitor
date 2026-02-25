@@ -2,8 +2,12 @@ import { ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
 import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite } from './store'
 import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
+import { apiCache, CacheTTL } from './cache'
 
 let api: JenkinsAPI | null = null
+
+/** In-flight request deduplication: prevents multiple identical requests from hitting Jenkins */
+const inFlight = new Map<string, Promise<unknown>>()
 
 function getApi(): JenkinsAPI {
   if (!api) {
@@ -35,6 +39,41 @@ function refreshApi(): void {
   } else {
     api = new JenkinsAPI(config)
   }
+  // Clear cache when config changes — old data may be from a different server
+  apiCache.clear()
+}
+
+/**
+ * Cached + deduplicated fetch helper.
+ * 1. Returns cached data if TTL hasn't expired
+ * 2. Deduplicates concurrent requests for the same key
+ * 3. Stores the result in cache
+ */
+async function cachedFetch<T>(
+  cacheKey: string,
+  ttl: number,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  // 1. Check cache
+  const cached = apiCache.get<T>(cacheKey)
+  if (cached !== undefined) return cached
+
+  // 2. Deduplicate in-flight requests
+  const existing = inFlight.get(cacheKey)
+  if (existing) return existing as Promise<T>
+
+  // 3. Fetch and cache
+  const promise = fetcher()
+    .then((data) => {
+      apiCache.set(cacheKey, data, ttl)
+      return data
+    })
+    .finally(() => {
+      inFlight.delete(cacheKey)
+    })
+
+  inFlight.set(cacheKey, promise)
+  return promise
 }
 
 export function registerIpcHandlers(): void {
@@ -61,7 +100,7 @@ export function registerIpcHandlers(): void {
   // ─── Items (Jobs) ──────────────────────────────────────────
   ipcMain.handle('jenkins:get-all-items', async () => {
     ensureConfigured()
-    return await getApi().getAllItems()
+    return cachedFetch('items:all', CacheTTL.ITEMS, () => getApi().getAllItems())
   })
 
   ipcMain.handle('jenkins:get-item', async (_, fullname: string) => {
@@ -71,6 +110,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('jenkins:query-items', async (_, pattern: string) => {
     ensureConfigured()
+    // queryItems calls getAllItems internally, which will hit the cache
     return await getApi().queryItems(pattern)
   })
 
@@ -82,13 +122,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('jenkins:get-build-history', async (_, fullname: string, limit?: number) => {
     ensureConfigured()
-    return await getApi().getBuildHistory(fullname, limit)
+    return cachedFetch(
+      `builds:${fullname}:${limit ?? 20}`,
+      CacheTTL.BUILD_HISTORY,
+      () => getApi().getBuildHistory(fullname, limit)
+    )
   })
 
   ipcMain.handle(
     'jenkins:get-console-output',
     async (_, fullname: string, number?: number) => {
       ensureConfigured()
+      // Console output is never cached — it's large and streamed
       return await getApi().getConsoleOutput(fullname, number)
     }
   )
@@ -105,32 +150,55 @@ export function registerIpcHandlers(): void {
     'jenkins:get-stages',
     async (_, fullname: string, number?: number) => {
       ensureConfigured()
-      return await getApi().getStages(fullname, number)
+      const cacheKey = `stages:${fullname}:${number ?? 'last'}`
+
+      // For stages, check if we have a completed build cached (infinite TTL)
+      const cached = apiCache.get<JenkinsStage[]>(cacheKey)
+      if (cached !== undefined) return cached
+
+      const stages = await getApi().getStages(fullname, number)
+
+      // Determine TTL: completed build stages never change
+      const isCompleted = stages.length > 0 &&
+        stages.every((s) => s.status !== 'IN_PROGRESS' && s.status !== 'PAUSED_PENDING_INPUT')
+      const ttl = isCompleted ? CacheTTL.STAGES_COMPLETED : CacheTTL.STAGES_RUNNING
+
+      apiCache.set(cacheKey, stages, ttl)
+      return stages
     }
   )
 
   ipcMain.handle('jenkins:get-running-builds', async () => {
     ensureConfigured()
-    return await getApi().getRunningBuilds()
+    // Running builds derive from nodes — use nodes cache internally
+    return cachedFetch('running-builds', CacheTTL.NODES, () => getApi().getRunningBuilds())
   })
 
   ipcMain.handle(
     'jenkins:build-item',
     async (_, fullname: string, params?: Record<string, string>) => {
       ensureConfigured()
-      return await getApi().buildItem(fullname, params)
+      const result = await getApi().buildItem(fullname, params)
+      // Invalidate caches that will be affected by the new build
+      apiCache.invalidate('items:')
+      apiCache.invalidate(`builds:${fullname}`)
+      apiCache.invalidate('running-builds')
+      return result
     }
   )
 
   ipcMain.handle('jenkins:stop-build', async (_, fullname: string, number: number) => {
     ensureConfigured()
-    return await getApi().stopBuild(fullname, number)
+    const result = await getApi().stopBuild(fullname, number)
+    apiCache.invalidate(`builds:${fullname}`)
+    apiCache.invalidate('running-builds')
+    return result
   })
 
   // ─── Nodes ──────────────────────────────────────────────────
   ipcMain.handle('jenkins:get-all-nodes', async () => {
     ensureConfigured()
-    return await getApi().getAllNodes()
+    return cachedFetch('nodes:all', CacheTTL.NODES, () => getApi().getAllNodes())
   })
 
   ipcMain.handle('jenkins:get-node', async (_, name: string) => {
@@ -141,12 +209,14 @@ export function registerIpcHandlers(): void {
   // ─── Queue ──────────────────────────────────────────────────
   ipcMain.handle('jenkins:get-queue-items', async () => {
     ensureConfigured()
-    return await getApi().getQueueItems()
+    return cachedFetch('queue:all', CacheTTL.QUEUE, () => getApi().getQueueItems())
   })
 
   ipcMain.handle('jenkins:cancel-queue-item', async (_, id: number) => {
     ensureConfigured()
-    return await getApi().cancelQueueItem(id)
+    const result = await getApi().cancelQueueItem(id)
+    apiCache.invalidate('queue:')
+    return result
   })
 
   // ─── Favorites ────────────────────────────────────────────
@@ -165,3 +235,7 @@ export function registerIpcHandlers(): void {
     installUpdate()
   })
 }
+
+// Re-export JenkinsStage type for the stages handler
+import type { JenkinsStage } from './jenkins-api'
+export type { JenkinsStage }

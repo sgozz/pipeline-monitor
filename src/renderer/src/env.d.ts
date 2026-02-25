@@ -120,6 +120,7 @@ declare global {
         onStatus: (callback: (status: UpdateStatus) => void) => void
       }
       onNavigate: (callback: (page: string) => void) => void
+      onVisibilityChange: (callback: (visible: boolean) => void) => void
     }
   }
 }

@@ -50,6 +50,9 @@ const api = {
   },
   onNavigate: (callback: (page: string) => void) => {
     ipcRenderer.on('navigate', (_, page) => callback(page))
+  },
+  onVisibilityChange: (callback: (visible: boolean) => void) => {
+    ipcRenderer.on('app:visibility', (_, visible) => callback(visible))
   }
 }
 

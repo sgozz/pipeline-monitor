@@ -254,24 +254,42 @@ export default function JobDetail({ fullname, onBack }: Props) {
   )
 }
 
+/** Local cache for completed build stages — avoids re-fetching on expand/collapse */
+const stagesCache = new Map<string, JenkinsStage[]>()
+
 /** Lazy-loaded stages panel for a single build */
 function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber: number }) {
-  const [stages, setStages] = useState<JenkinsStage[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  const cacheKey = `${fullname}:${buildNumber}`
+  const [stages, setStages] = useState<JenkinsStage[] | null>(
+    stagesCache.get(cacheKey) ?? null
+  )
+  const [loading, setLoading] = useState(!stagesCache.has(cacheKey))
   const [error, setError] = useState(false)
 
   const fetchStages = useCallback(async () => {
+    // Skip fetch if we already have cached completed stages
+    if (stagesCache.has(cacheKey)) {
+      setStages(stagesCache.get(cacheKey)!)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(false)
     try {
       const data = await window.api.jenkins.getStages(fullname, buildNumber)
       setStages(data)
+      // Cache stages if the build is completed (all stages have a terminal status)
+      const isCompleted = data.length > 0 &&
+        data.every((s) => s.status !== 'IN_PROGRESS' && s.status !== 'PAUSED_PENDING_INPUT')
+      if (isCompleted) {
+        stagesCache.set(cacheKey, data)
+      }
     } catch {
       setError(true)
     } finally {
       setLoading(false)
     }
-  }, [fullname, buildNumber])
+  }, [fullname, buildNumber, cacheKey])
 
   useEffect(() => {
     fetchStages()

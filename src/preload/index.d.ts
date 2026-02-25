@@ -8,6 +8,6 @@ declare global {
       favorites: FavoritesAPI
       updater: UpdaterAPI
       onNavigate: (callback: (page: string) => void) => void
-    }
+      onVisibilityChange: (callback: (visible: boolean) => void) => void
   }
 }
