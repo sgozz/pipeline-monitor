@@ -7,6 +7,12 @@ import { initAutoUpdater } from './updater'
 import { initNotifier, onBuildStateChange } from './notifier'
 
 let mainWindow: BrowserWindow | null = null
+
+/** Safely check if mainWindow exists and is not destroyed */
+function isWindowAlive(): boolean {
+  return mainWindow !== null && !mainWindow.isDestroyed()
+}
+
 let tray: Tray | null = null
 
 function createWindow(): void {
@@ -30,29 +36,29 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    if (isWindowAlive()) mainWindow!.show()
   })
 
   // Hide to tray instead of closing
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault()
-      mainWindow?.hide()
+      if (isWindowAlive()) mainWindow!.hide()
     }
   })
 
   // Notify renderer when window visibility changes (for polling pause)
   mainWindow.on('show', () => {
-    mainWindow?.webContents.send('app:visibility', true)
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', true)
   })
   mainWindow.on('hide', () => {
-    mainWindow?.webContents.send('app:visibility', false)
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
   })
   mainWindow.on('minimize', () => {
-    mainWindow?.webContents.send('app:visibility', false)
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
   })
   mainWindow.on('restore', () => {
-    mainWindow?.webContents.send('app:visibility', true)
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', true)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -124,8 +130,10 @@ function createTray(): void {
     {
       label: 'Show Dashboard',
       click: (): void => {
-        mainWindow?.show()
-        mainWindow?.focus()
+        if (isWindowAlive()) {
+          mainWindow!.show()
+          mainWindow!.focus()
+        }
       }
     },
     { type: 'separator' },
@@ -152,11 +160,13 @@ function createTray(): void {
 
   // Show window on tray click (macOS)
   tray.on('click', () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.hide()
-    } else {
-      mainWindow?.show()
-      mainWindow?.focus()
+    if (isWindowAlive()) {
+      if (mainWindow!.isVisible()) {
+        mainWindow!.hide()
+      } else {
+        mainWindow!.show()
+        mainWindow!.focus()
+      }
     }
   })
 }
@@ -181,13 +191,15 @@ app.whenReady().then(() => {
 
   // If not configured, show settings immediately
   if (!isConfigured()) {
-    mainWindow?.webContents.once('did-finish-load', () => {
-      mainWindow?.webContents.send('navigate', 'settings')
-    })
+    if (isWindowAlive()) {
+      mainWindow!.webContents.once('did-finish-load', () => {
+        if (isWindowAlive()) mainWindow!.webContents.send('navigate', 'settings')
+      })
+    }
   }
 
   app.on('activate', () => {
-    mainWindow?.show()
+    if (isWindowAlive()) mainWindow!.show()
   })
 })
 
