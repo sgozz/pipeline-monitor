@@ -1,0 +1,26 @@
+appId: com.cosmica.jenkins-ui
+productName: Jenkins UI
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+mac:
+  icon: build/icon.icns
+  target:
+    - dmg
+    - zip
+  entitlementsInherit: build/entitlements.mac.plist
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+    - portable
+linux:
+  icon: build/icon.png
+  target:
+    - AppImage
+    - deb
