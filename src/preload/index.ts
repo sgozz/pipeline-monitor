@@ -53,7 +53,8 @@ const api = {
   },
   onVisibilityChange: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('app:visibility', (_, visible) => callback(visible))
-  }
+  },
+  getVersion: (): Promise<string> => ipcRenderer.invoke('app:get-version')
 }
 
 contextBridge.exposeInMainWorld('api', api)

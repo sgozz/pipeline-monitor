@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
 import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite } from './store'
 import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
@@ -234,6 +234,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('updater:install', () => {
     installUpdate()
   })
+
+  // ─── App Info ─────────────────────────────────────────────
+  ipcMain.handle('app:get-version', () => app.getVersion())
 }
 
 // Re-export JenkinsStage type for the stages handler

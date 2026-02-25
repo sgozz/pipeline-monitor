@@ -121,7 +121,7 @@ declare global {
       }
       onNavigate: (callback: (page: string) => void) => void
       onVisibilityChange: (callback: (visible: boolean) => void) => void
-    }
+      getVersion: () => Promise<string>
   }
 }
 

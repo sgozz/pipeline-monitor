@@ -1,5 +1,5 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
 export interface UpdateStatus {
@@ -80,5 +80,7 @@ export function checkForUpdates(): void {
 }
 
 export function installUpdate(): void {
+  // Set isQuitting so the close handler doesn't intercept and hide to tray
+  app.isQuitting = true
   autoUpdater.quitAndInstall(false, true)
 }

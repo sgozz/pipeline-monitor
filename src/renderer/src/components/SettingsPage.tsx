@@ -17,9 +17,11 @@ export default function SettingsPage({ onSaved }: Props) {
   const [testResult, setTestResult] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
     window.api.settings.get().then(setSettings)
+    window.api.getVersion().then(setAppVersion)
   }, [])
 
   const handleChange = (key: keyof AppSettings, value: string | number | boolean) => {
@@ -177,6 +179,13 @@ export default function SettingsPage({ onSaved }: Props) {
               ✗ Connection failed. Check your URL and credentials.
             </p>
           )}
+        </div>
+
+        {/* App version */}
+        <div className="mt-8 pt-4 border-t border-slate-800">
+          <p className="text-xs text-slate-500">
+            Jenkins UI v{appVersion}
+          </p>
         </div>
       </div>
     </div>

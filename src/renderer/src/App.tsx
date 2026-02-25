@@ -38,9 +38,10 @@ export default function App() {
   const { data: queueItems } = useQueue(isReady ? 10000 : 0)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
   const [updateDismissed, setUpdateDismissed] = useState(false)
-
+  const [appVersion, setAppVersion] = useState('')
   useEffect(() => {
     window.api.settings.isConfigured().then(setConfigured)
+    window.api.getVersion().then(setAppVersion)
     window.api.onNavigate((target) => {
       if (target === 'settings') setPage({ id: 'settings' })
     })
@@ -129,6 +130,11 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* App version */}
+        <div className="px-4 py-2 border-t border-slate-800">
+          <span className="text-[10px] text-slate-600">v{appVersion}</span>
+        </div>
       </nav>
 
       {/* Main content */}
