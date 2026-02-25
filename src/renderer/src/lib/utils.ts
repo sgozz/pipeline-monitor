@@ -172,6 +172,67 @@ export function groupByFolder(items: JenkinsItem[]): Record<string, JenkinsItem[
 }
 
 /**
+ * Status priority for sorting: failed first, then running, then unstable, etc.
+ */
+function colorPriority(color: string): number {
+  const base = color?.replace('_anime', '') || 'notbuilt'
+  const isAnimated = color?.endsWith('_anime')
+  // Failed running > Failed > Running > Unstable > Success > rest
+  if (base === 'red' && isAnimated) return 0
+  if (base === 'red') return 1
+  if (isAnimated) return 2
+  if (base === 'yellow') return 3
+  if (base === 'blue' || base === 'green') return 4
+  if (base === 'aborted') return 5
+  return 6
+}
+
+/**
+ * Sort jobs by status priority (failed first), then alphabetically by name
+ */
+export function sortJobsByStatus(items: JenkinsItem[]): JenkinsItem[] {
+  return [...items].sort((a, b) => {
+    const pa = colorPriority(a.color)
+    const pb = colorPriority(b.color)
+    if (pa !== pb) return pa - pb
+    return a.fullname.localeCompare(b.fullname)
+  })
+}
+
+/**
+ * Sort folder names with pinned folders first, then alphabetically
+ */
+export function sortFolders(folders: string[], pinned: string[]): string[] {
+  const pinnedSet = new Set(pinned)
+  const pinnedFolders = folders.filter((f) => pinnedSet.has(f))
+  const unpinnedFolders = folders.filter((f) => !pinnedSet.has(f))
+  // Pinned folders keep their pin order, unpinned are alphabetical
+  pinnedFolders.sort((a, b) => pinned.indexOf(a) - pinned.indexOf(b))
+  unpinnedFolders.sort()
+  return [...pinnedFolders, ...unpinnedFolders]
+}
+
+/**
+ * Parse a multibranch pipeline fullname into service name and branch.
+ * e.g. 'MIND/mind-purchase-order-service/master' -> { subPath: 'mind-purchase-order-service', branch: 'master' }
+ * e.g. 'MIND/my-service' -> { subPath: '', branch: '' } (single-branch, no split needed)
+ */
+export function parseMultibranch(fullname: string): {
+  serviceName: string
+  branch: string
+  isMultibranch: boolean
+} {
+  const parts = fullname.split('/')
+  if (parts.length >= 3) {
+    // Multibranch: folder / service / branch
+    const branch = parts[parts.length - 1]
+    const serviceName = parts.slice(1, -1).join('/')
+    return { serviceName, branch, isMultibranch: true }
+  }
+  return { serviceName: '', branch: '', isMultibranch: false }
+}
+
+/**
  * Simple ANSI to HTML converter for Jenkins console output
  */
 export function ansiToHtml(text: string): string {

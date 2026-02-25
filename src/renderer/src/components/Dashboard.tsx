@@ -1,7 +1,13 @@
-import { useState, useMemo } from 'react'
-import { Search, Play, RefreshCw, ChevronRight, Folder } from 'lucide-react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { Search, Play, RefreshCw, ChevronRight, Folder, Pin, PinOff, GitBranch } from 'lucide-react'
 import { useJenkinsItems } from '../hooks/useJenkins'
-import { colorToStatus, timeAgo, groupByFolder, parseFullname } from '../lib/utils'
+import {
+  colorToStatus,
+  groupByFolder,
+  sortJobsByStatus,
+  sortFolders,
+  parseMultibranch
+} from '../lib/utils'
 
 interface Props {
   onOpenJob: (fullname: string) => void
@@ -12,6 +18,26 @@ export default function Dashboard({ onOpenJob }: Props) {
   const [search, setSearch] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null)
+  const [pinnedFolders, setPinnedFolders] = useState<string[]>([])
+
+  // Load pinned folders from store on mount
+  useEffect(() => {
+    window.api.settings.getPinnedFolders().then(setPinnedFolders).catch(() => {})
+  }, [])
+
+  const togglePin = useCallback(
+    (e: React.MouseEvent, folder: string) => {
+      e.stopPropagation()
+      setPinnedFolders((prev) => {
+        const next = prev.includes(folder)
+          ? prev.filter((f) => f !== folder)
+          : [...prev, folder]
+        window.api.settings.setPinnedFolders(next).catch(() => {})
+        return next
+      })
+    },
+    []
+  )
 
   const filtered = useMemo(() => {
     if (!items) return []
@@ -26,8 +52,8 @@ export default function Dashboard({ onOpenJob }: Props) {
 
   const grouped = useMemo(() => groupByFolder(filtered), [filtered])
   const folderNames = useMemo(
-    () => Object.keys(grouped).sort(),
-    [grouped]
+    () => sortFolders(Object.keys(grouped), pinnedFolders),
+    [grouped, pinnedFolders]
   )
 
   // Auto-expand all folders when searching
@@ -111,8 +137,9 @@ export default function Dashboard({ onOpenJob }: Props) {
         ) : (
           <div className="divide-y divide-slate-800/50">
             {folderNames.map((folder) => {
-              const jobs = grouped[folder]
+              const jobs = sortJobsByStatus(grouped[folder])
               const isExpanded = expandedFolders.has(folder)
+              const isPinned = pinnedFolders.includes(folder)
               const failedCount = jobs.filter(
                 (j) => j.color === 'red' || j.color === 'red_anime'
               ).length
@@ -125,14 +152,22 @@ export default function Dashboard({ onOpenJob }: Props) {
                   {/* Folder header */}
                   <button
                     onClick={() => toggleFolder(folder)}
-                    className="w-full flex items-center gap-2 px-4 py-2 bg-slate-900/50 hover:bg-slate-900 transition text-sm"
+                    className={`w-full flex items-center gap-2 px-4 py-2 hover:bg-slate-900 transition text-sm ${
+                      isPinned ? 'bg-slate-900/80' : 'bg-slate-900/50'
+                    }`}
                   >
                     <ChevronRight
                       size={14}
                       className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                     />
-                    <Folder size={14} className="text-slate-500" />
-                    <span className="font-medium text-slate-300">{folder}</span>
+                    {isPinned ? (
+                      <Pin size={14} className="text-amber-400" />
+                    ) : (
+                      <Folder size={14} className="text-slate-500" />
+                    )}
+                    <span className={`font-medium ${isPinned ? 'text-slate-200' : 'text-slate-300'}`}>
+                      {folder}
+                    </span>
                     <span className="text-xs text-slate-500">({jobs.length})</span>
                     {failedCount > 0 && (
                       <span className="ml-auto text-xs text-red-400 bg-red-400/10 px-1.5 rounded">
@@ -144,6 +179,17 @@ export default function Dashboard({ onOpenJob }: Props) {
                         {runningCount} running
                       </span>
                     )}
+                    <button
+                      onClick={(e) => togglePin(e, folder)}
+                      className={`${failedCount === 0 && runningCount === 0 ? 'ml-auto' : ''} p-0.5 rounded transition ${
+                        isPinned
+                          ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-400/10'
+                          : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100'
+                      }`}
+                      title={isPinned ? 'Unpin folder' : 'Pin folder to top'}
+                    >
+                      {isPinned ? <PinOff size={12} /> : <Pin size={12} />}
+                    </button>
                   </button>
 
                   {/* Jobs in folder */}
@@ -151,11 +197,7 @@ export default function Dashboard({ onOpenJob }: Props) {
                     <div>
                       {jobs.map((item) => {
                         const status = colorToStatus(item.color)
-                        const { name } = parseFullname(item.fullname)
-                        const subPath = item.fullname
-                          .split('/')
-                          .slice(1, -1)
-                          .join('/')
+                        const mb = parseMultibranch(item.fullname)
 
                         return (
                           <button
@@ -167,14 +209,21 @@ export default function Dashboard({ onOpenJob }: Props) {
                               className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dotClass}`}
                             />
                             <div className="flex-1 min-w-0 text-left">
-                              <div className="flex items-center gap-2">
-                                {subPath && (
-                                  <span className="text-xs text-slate-500">{subPath}/</span>
-                                )}
-                                <span className="text-sm text-slate-200 truncate">
-                                  {name}
+                              {mb.isMultibranch ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-slate-200 truncate">
+                                    {mb.serviceName}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
+                                    <GitBranch size={10} />
+                                    {mb.branch}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-slate-200 truncate block">
+                                  {item.name}
                                 </span>
-                              </div>
+                              )}
                             </div>
                             <span className={`text-xs ${status.class}`}>
                               {status.label}

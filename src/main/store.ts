@@ -6,6 +6,7 @@ export interface AppSettings {
   jenkinsToken: string
   refreshInterval: number // seconds
   showNotifications: boolean
+  pinnedFolders: string[]
 }
 
 const defaults: AppSettings = {
@@ -13,7 +14,8 @@ const defaults: AppSettings = {
   jenkinsUsername: '',
   jenkinsToken: '',
   refreshInterval: 30,
-  showNotifications: true
+  showNotifications: true,
+  pinnedFolders: []
 }
 
 const store = new Store<AppSettings>({
@@ -27,7 +29,8 @@ export function getSettings(): AppSettings {
     jenkinsUsername: store.get('jenkinsUsername'),
     jenkinsToken: store.get('jenkinsToken'),
     refreshInterval: store.get('refreshInterval'),
-    showNotifications: store.get('showNotifications')
+    showNotifications: store.get('showNotifications'),
+    pinnedFolders: store.get('pinnedFolders')
   }
 }
 
@@ -41,4 +44,14 @@ export function setSettings(settings: Partial<AppSettings>): AppSettings {
 export function isConfigured(): boolean {
   const s = getSettings()
   return !!(s.jenkinsUrl && s.jenkinsUsername && s.jenkinsToken)
+}
+
+
+export function getPinnedFolders(): string[] {
+  return store.get('pinnedFolders') || []
+}
+
+export function setPinnedFolders(folders: string[]): string[] {
+  store.set('pinnedFolders', folders)
+  return folders
 }

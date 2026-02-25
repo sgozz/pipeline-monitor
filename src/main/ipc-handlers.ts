@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
-import { getSettings, setSettings, isConfigured } from './store'
+import { getSettings, setSettings, isConfigured, getPinnedFolders, setPinnedFolders } from './store'
 
 let api: JenkinsAPI | null = null
 
@@ -56,6 +56,10 @@ export function registerIpcHandlers(): void {
       return false
     }
   })
+
+  ipcMain.handle('settings:get-pinned-folders', () => getPinnedFolders())
+
+  ipcMain.handle('settings:set-pinned-folders', (_, folders: string[]) => setPinnedFolders(folders))
 
   // ─── Items (Jobs) ──────────────────────────────────────────
   ipcMain.handle('jenkins:get-all-items', async () => {
