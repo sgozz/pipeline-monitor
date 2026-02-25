@@ -36,23 +36,35 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    if (isWindowAlive()) mainWindow!.show()
+    if (isWindowAlive()) {
+      mainWindow!.show()
+      if (process.platform === 'darwin') app.dock?.show()
+    }
   })
 
   // Hide to tray instead of closing
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault()
-      if (isWindowAlive()) mainWindow!.hide()
+      if (isWindowAlive()) {
+        mainWindow!.hide()
+        if (process.platform === 'darwin') app.dock?.hide()
+      }
     }
   })
 
   // Notify renderer when window visibility changes (for polling pause)
   mainWindow.on('show', () => {
-    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', true)
+    if (isWindowAlive()) {
+      mainWindow!.webContents.send('app:visibility', true)
+      if (process.platform === 'darwin') app.dock?.show()
+    }
   })
   mainWindow.on('hide', () => {
-    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
+    if (isWindowAlive()) {
+      mainWindow!.webContents.send('app:visibility', false)
+      if (process.platform === 'darwin') app.dock?.hide()
+    }
   })
   mainWindow.on('minimize', () => {
     if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
@@ -133,6 +145,7 @@ function createTray(): void {
         if (isWindowAlive()) {
           mainWindow!.show()
           mainWindow!.focus()
+          if (process.platform === 'darwin') app.dock?.show()
         }
       }
     },
@@ -158,14 +171,16 @@ function createTray(): void {
 
   tray.setContextMenu(contextMenu)
 
-  // Show window on tray click (macOS)
+  // Show/hide window on tray click
   tray.on('click', () => {
     if (isWindowAlive()) {
       if (mainWindow!.isVisible()) {
         mainWindow!.hide()
+        if (process.platform === 'darwin') app.dock?.hide()
       } else {
         mainWindow!.show()
         mainWindow!.focus()
+        if (process.platform === 'darwin') app.dock?.show()
       }
     }
   })
@@ -199,7 +214,11 @@ app.whenReady().then(() => {
   }
 
   app.on('activate', () => {
-    if (isWindowAlive()) mainWindow!.show()
+    if (isWindowAlive()) {
+      mainWindow!.show()
+      mainWindow!.focus()
+      if (process.platform === 'darwin') app.dock?.show()
+    }
   })
 })
 
