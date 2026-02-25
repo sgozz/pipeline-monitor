@@ -1,7 +1,15 @@
-import { useState, useMemo } from 'react'
-import { Search, Play, RefreshCw, ChevronRight, Folder } from 'lucide-react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import {
+  Search,
+  Play,
+  RefreshCw,
+  ChevronRight,
+  Folder,
+  GitBranch,
+  Star
+} from 'lucide-react'
 import { useJenkinsItems } from '../hooks/useJenkins'
-import { colorToStatus, timeAgo, groupByFolder, parseFullname } from '../lib/utils'
+import { colorToStatus, groupHierarchically } from '../lib/utils'
 
 interface Props {
   onOpenJob: (fullname: string) => void
@@ -11,7 +19,20 @@ export default function Dashboard({ onOpenJob }: Props) {
   const { data: items, loading, error, refresh } = useJenkinsItems()
   const [search, setSearch] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+
+  // Load favorites on mount
+  useEffect(() => {
+    window.api.favorites.get().then((favs) => setFavorites(new Set(favs)))
+  }, [])
+
+  const toggleFavorite = useCallback(async (e: React.MouseEvent, fullname: string) => {
+    e.stopPropagation()
+    const updated = await window.api.favorites.toggle(fullname)
+    setFavorites(new Set(updated))
+  }, [])
 
   const filtered = useMemo(() => {
     if (!items) return []
@@ -24,24 +45,41 @@ export default function Dashboard({ onOpenJob }: Props) {
     )
   }, [items, search])
 
-  const grouped = useMemo(() => groupByFolder(filtered), [filtered])
-  const folderNames = useMemo(
-    () => Object.keys(grouped).sort(),
-    [grouped]
-  )
+  const grouped = useMemo(() => groupHierarchically(filtered), [filtered])
 
-  // Auto-expand all folders when searching
+  const favoriteItems = useMemo(() => {
+    if (!items || favorites.size === 0) return []
+    return items.filter((item) => favorites.has(item.fullname))
+  }, [items, favorites])
+
+  // Auto-expand all folders and jobs when searching
   useMemo(() => {
     if (search) {
-      setExpandedFolders(new Set(folderNames))
+      setExpandedFolders(new Set(grouped.map((g) => g.folder)))
+      const allJobKeys = new Set<string>()
+      for (const fg of grouped) {
+        for (const jg of fg.jobs) {
+          allJobKeys.add(`${fg.folder}/${jg.job}`)
+        }
+      }
+      setExpandedJobs(allJobKeys)
     }
-  }, [search, folderNames])
+  }, [search, grouped])
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev)
       if (next.has(folder)) next.delete(folder)
       else next.add(folder)
+      return next
+    })
+  }
+
+  const toggleJob = (key: string) => {
+    setExpandedJobs((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -110,21 +148,46 @@ export default function Dashboard({ onOpenJob }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-slate-800/50">
-            {folderNames.map((folder) => {
-              const jobs = grouped[folder]
-              const isExpanded = expandedFolders.has(folder)
-              const failedCount = jobs.filter(
+            {/* Favorites section */}
+            {favoriteItems.length > 0 && !search && (
+              <div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/5 border-b border-slate-800/50">
+                  <Star size={14} className="text-amber-400 fill-amber-400" />
+                  <span className="font-medium text-amber-300 text-sm">Favorites</span>
+                  <span className="text-xs text-slate-500">({favoriteItems.length})</span>
+                </div>
+                <div>
+                  {favoriteItems.map((item) => (
+                    <BranchRow
+                      key={`fav-${item.fullname}`}
+                      item={item}
+                      isFavorite={true}
+                      onOpenJob={onOpenJob}
+                      onToggleFavorite={toggleFavorite}
+                      onTriggerBuild={handleTriggerBuild}
+                      triggeringJob={triggeringJob}
+                      indent={1}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Folder > Job > Branch hierarchy */}
+            {grouped.map((folderGroup) => {
+              const isExpanded = expandedFolders.has(folderGroup.folder)
+              const failedCount = folderGroup.allItems.filter(
                 (j) => j.color === 'red' || j.color === 'red_anime'
               ).length
-              const runningCount = jobs.filter(
+              const runningCount = folderGroup.allItems.filter(
                 (j) => j.color?.endsWith('_anime')
               ).length
 
               return (
-                <div key={folder}>
+                <div key={folderGroup.folder}>
                   {/* Folder header */}
                   <button
-                    onClick={() => toggleFolder(folder)}
+                    onClick={() => toggleFolder(folderGroup.folder)}
                     className="w-full flex items-center gap-2 px-4 py-2 bg-slate-900/50 hover:bg-slate-900 transition text-sm"
                   >
                     <ChevronRight
@@ -132,8 +195,8 @@ export default function Dashboard({ onOpenJob }: Props) {
                       className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                     />
                     <Folder size={14} className="text-slate-500" />
-                    <span className="font-medium text-slate-300">{folder}</span>
-                    <span className="text-xs text-slate-500">({jobs.length})</span>
+                    <span className="font-medium text-slate-300">{folderGroup.folder}</span>
+                    <span className="text-xs text-slate-500">({folderGroup.allItems.length})</span>
                     {failedCount > 0 && (
                       <span className="ml-auto text-xs text-red-400 bg-red-400/10 px-1.5 rounded">
                         {failedCount} failed
@@ -149,55 +212,77 @@ export default function Dashboard({ onOpenJob }: Props) {
                   {/* Jobs in folder */}
                   {isExpanded && (
                     <div>
-                      {jobs.map((item) => {
-                        const status = colorToStatus(item.color)
-                        const { name } = parseFullname(item.fullname)
-                        const subPath = item.fullname
-                          .split('/')
-                          .slice(1, -1)
-                          .join('/')
+                      {folderGroup.jobs.map((jobGroup) => {
+                        const jobKey = `${folderGroup.folder}/${jobGroup.job}`
+                        const isJobExpanded = expandedJobs.has(jobKey)
+                        const hasBranches = jobGroup.branches.length > 1
+                        const jobFailed = jobGroup.branches.filter(
+                          (j) => j.color === 'red' || j.color === 'red_anime'
+                        ).length
+                        const jobRunning = jobGroup.branches.filter(
+                          (j) => j.color?.endsWith('_anime')
+                        ).length
+
+                        // If single branch, render it directly without a sub-group
+                        if (!hasBranches) {
+                          return (
+                            <BranchRow
+                              key={jobGroup.branches[0].fullname}
+                              item={jobGroup.branches[0]}
+                              isFavorite={favorites.has(jobGroup.branches[0].fullname)}
+                              onOpenJob={onOpenJob}
+                              onToggleFavorite={toggleFavorite}
+                              onTriggerBuild={handleTriggerBuild}
+                              triggeringJob={triggeringJob}
+                              indent={1}
+                            />
+                          )
+                        }
 
                         return (
-                          <button
-                            key={item.fullname}
-                            onClick={() => onOpenJob(item.fullname)}
-                            className="w-full flex items-center gap-3 px-4 py-2 pl-10 hover:bg-slate-900/50 transition group"
-                          >
-                            <span
-                              className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dotClass}`}
-                            />
-                            <div className="flex-1 min-w-0 text-left">
-                              <div className="flex items-center gap-2">
-                                {subPath && (
-                                  <span className="text-xs text-slate-500">{subPath}/</span>
-                                )}
-                                <span className="text-sm text-slate-200 truncate">
-                                  {name}
-                                </span>
-                              </div>
-                            </div>
-                            <span className={`text-xs ${status.class}`}>
-                              {status.label}
-                            </span>
-                            {item.lastBuild && (
-                              <span className="text-xs text-slate-500">
-                                #{item.lastBuild.number}
-                              </span>
-                            )}
+                          <div key={jobKey}>
+                            {/* Job sub-header */}
                             <button
-                              onClick={(e) => handleTriggerBuild(e, item.fullname)}
-                              disabled={triggeringJob === item.fullname}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition"
-                              title="Trigger build"
+                              onClick={() => toggleJob(jobKey)}
+                              className="w-full flex items-center gap-2 pl-8 pr-4 py-1.5 hover:bg-slate-900/30 transition text-sm"
                             >
-                              <Play
+                              <ChevronRight
                                 size={12}
-                                className={
-                                  triggeringJob === item.fullname ? 'animate-pulse' : ''
-                                }
+                                className={`text-slate-600 transition-transform ${isJobExpanded ? 'rotate-90' : ''}`}
                               />
+                              <GitBranch size={12} className="text-slate-600" />
+                              <span className="text-slate-400 text-xs font-medium">{jobGroup.job}</span>
+                              <span className="text-xs text-slate-600">({jobGroup.branches.length})</span>
+                              {jobFailed > 0 && (
+                                <span className="ml-auto text-[10px] text-red-400 bg-red-400/10 px-1 rounded">
+                                  {jobFailed}
+                                </span>
+                              )}
+                              {jobRunning > 0 && (
+                                <span className={`${jobFailed > 0 ? '' : 'ml-auto'} text-[10px] text-blue-400 bg-blue-400/10 px-1 rounded`}>
+                                  {jobRunning}
+                                </span>
+                              )}
                             </button>
-                          </button>
+
+                            {/* Branches */}
+                            {isJobExpanded && (
+                              <div>
+                                {jobGroup.branches.map((item) => (
+                                  <BranchRow
+                                    key={item.fullname}
+                                    item={item}
+                                    isFavorite={favorites.has(item.fullname)}
+                                    onOpenJob={onOpenJob}
+                                    onToggleFavorite={toggleFavorite}
+                                    onTriggerBuild={handleTriggerBuild}
+                                    triggeringJob={triggeringJob}
+                                    indent={2}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         )
                       })}
                     </div>
@@ -209,5 +294,74 @@ export default function Dashboard({ onOpenJob }: Props) {
         )}
       </div>
     </div>
+  )
+}
+
+/** Single branch/job row */
+function BranchRow({
+  item,
+  isFavorite,
+  onOpenJob,
+  onToggleFavorite,
+  onTriggerBuild,
+  triggeringJob,
+  indent
+}: {
+  item: JenkinsItem
+  isFavorite: boolean
+  onOpenJob: (fullname: string) => void
+  onToggleFavorite: (e: React.MouseEvent, fullname: string) => void
+  onTriggerBuild: (e: React.MouseEvent, fullname: string) => void
+  triggeringJob: string | null
+  indent: number
+}) {
+  const status = colorToStatus(item.color)
+  const branchName = item.fullname.split('/').pop() || item.name
+  const paddingLeft = indent === 2 ? 'pl-14' : 'pl-10'
+
+  return (
+    <button
+      onClick={() => onOpenJob(item.fullname)}
+      className={`w-full flex items-center gap-3 px-4 py-2 ${paddingLeft} hover:bg-slate-900/50 transition group`}
+    >
+      <span
+        className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dotClass}`}
+      />
+      <span className="text-sm text-slate-200 truncate flex-1 text-left">
+        {branchName}
+      </span>
+      <span className={`text-xs ${status.class}`}>
+        {status.label}
+      </span>
+      {item.lastBuild && (
+        <span className="text-xs text-slate-500">
+          #{item.lastBuild.number}
+        </span>
+      )}
+      <button
+        onClick={(e) => onToggleFavorite(e, item.fullname)}
+        className={`p-1 rounded transition ${
+          isFavorite
+            ? 'text-amber-400 hover:text-amber-300'
+            : 'opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400'
+        }`}
+        title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <Star size={12} className={isFavorite ? 'fill-amber-400' : ''} />
+      </button>
+      <button
+        onClick={(e) => onTriggerBuild(e, item.fullname)}
+        disabled={triggeringJob === item.fullname}
+        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition"
+        title="Trigger build"
+      >
+        <Play
+          size={12}
+          className={
+            triggeringJob === item.fullname ? 'animate-pulse' : ''
+          }
+        />
+      </button>
+    </button>
   )
 }

@@ -172,6 +172,50 @@ export function groupByFolder(items: JenkinsItem[]): Record<string, JenkinsItem[
 }
 
 /**
+ * Group jobs hierarchically: Folder → Job → Branch
+ * fullname format: "FOLDER/job-name/branch" or "FOLDER/job-name"
+ */
+export interface BranchGroup {
+  folder: string
+  job: string
+  branches: JenkinsItem[]
+}
+
+export interface FolderGroup {
+  folder: string
+  jobs: BranchGroup[]
+  allItems: JenkinsItem[]
+}
+
+export function groupHierarchically(items: JenkinsItem[]): FolderGroup[] {
+  const folderMap = new Map<string, Map<string, JenkinsItem[]>>()
+
+  for (const item of items) {
+    const parts = item.fullname.split('/')
+    const folder = parts[0] || 'Other'
+    // If 3+ segments: folder/job/branch. If 2: folder/job (job is the leaf). If 1: just a job.
+    const jobName = parts.length >= 3 ? parts.slice(1, -1).join('/') : (parts.length === 2 ? parts[1] : parts[0])
+
+    if (!folderMap.has(folder)) folderMap.set(folder, new Map())
+    const jobMap = folderMap.get(folder)!
+    if (!jobMap.has(jobName)) jobMap.set(jobName, [])
+    jobMap.get(jobName)!.push(item)
+  }
+
+  const result: FolderGroup[] = []
+  for (const [folder, jobMap] of [...folderMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const jobs: BranchGroup[] = []
+    const allItems: JenkinsItem[] = []
+    for (const [job, branches] of [...jobMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      jobs.push({ folder, job, branches })
+      allItems.push(...branches)
+    }
+    result.push({ folder, jobs, allItems })
+  }
+  return result
+}
+
+/**
  * Simple ANSI to HTML converter for Jenkins console output
  */
 export function ansiToHtml(text: string): string {

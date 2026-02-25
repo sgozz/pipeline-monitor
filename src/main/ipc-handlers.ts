@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
-import { getSettings, setSettings, isConfigured } from './store'
+import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite } from './store'
 
 let api: JenkinsAPI | null = null
 
@@ -139,4 +139,9 @@ export function registerIpcHandlers(): void {
     ensureConfigured()
     return await getApi().cancelQueueItem(id)
   })
+
+  // ─── Favorites ────────────────────────────────────────────
+  ipcMain.handle('favorites:get', () => getFavorites())
+
+  ipcMain.handle('favorites:toggle', (_, fullname: string) => toggleFavorite(fullname))
 }

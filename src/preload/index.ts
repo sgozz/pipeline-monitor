@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 export type JenkinsAPI = typeof api.jenkins
 export type SettingsAPI = typeof api.settings
+export type FavoritesAPI = typeof api.favorites
 
 const api = {
   jenkins: {
@@ -31,6 +32,10 @@ const api = {
     set: (settings: Record<string, unknown>) => ipcRenderer.invoke('settings:set', settings),
     isConfigured: () => ipcRenderer.invoke('settings:is-configured'),
     testConnection: () => ipcRenderer.invoke('settings:test-connection')
+  },
+  favorites: {
+    get: (): Promise<string[]> => ipcRenderer.invoke('favorites:get'),
+    toggle: (fullname: string): Promise<string[]> => ipcRenderer.invoke('favorites:toggle', fullname)
   },
   onNavigate: (callback: (page: string) => void) => {
     ipcRenderer.on('navigate', (_, page) => callback(page))

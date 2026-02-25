@@ -92,6 +92,10 @@ declare global {
         isConfigured: () => Promise<boolean>
         testConnection: () => Promise<boolean>
       }
+      favorites: {
+        get: () => Promise<string[]>
+        toggle: (fullname: string) => Promise<string[]>
+      }
       onNavigate: (callback: (page: string) => void) => void
     }
   }
