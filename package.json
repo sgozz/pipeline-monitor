@@ -2,6 +2,10 @@
   "name": "jenkins-ui",
   "version": "1.0.0",
   "description": "Simplified Jenkins dashboard - system tray app",
+  "author": {
+    "name": "sgozz",
+    "email": "sgozz@users.noreply.github.com"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
