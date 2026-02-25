@@ -1,0 +1,117 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Cancel any in-progress run on the same branch
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+          - os: ubuntu-latest
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run build
+
+      - name: Package distributable
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts (macOS)
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          retention-days: 1
+          overwrite: true
+
+      - name: Upload artifacts (Windows)
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-win
+          path: |
+            dist/*.exe
+          retention-days: 1
+          overwrite: true
+
+      - name: Upload artifacts (Linux)
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          retention-days: 1
+          overwrite: true
+
+  # Clean up old artifacts to keep only the latest build
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    permissions:
+      actions: write
+    steps:
+      - name: Delete old artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            // Keep only the most recent artifact per name
+            const latest = new Map();
+            for (const a of artifacts.data.artifacts) {
+              if (!latest.has(a.name) || new Date(a.created_at) > new Date(latest.get(a.name).created_at)) {
+                latest.set(a.name, a);
+              }
+            }
+
+            const latestIds = new Set([...latest.values()].map(a => a.id));
+
+            for (const a of artifacts.data.artifacts) {
+              if (!latestIds.has(a.id) && !a.expired) {
+                console.log(`Deleting old artifact: ${a.name} (id: ${a.id})`);
+                await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: a.id });
+              }
+            }
