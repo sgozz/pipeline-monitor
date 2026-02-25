@@ -36,35 +36,23 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    if (isWindowAlive()) {
-      mainWindow!.show()
-      if (process.platform === 'darwin') app.dock?.show()
-    }
+    if (isWindowAlive()) mainWindow!.show()
   })
 
   // Hide to tray instead of closing
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault()
-      if (isWindowAlive()) {
-        mainWindow!.hide()
-        if (process.platform === 'darwin') app.dock?.hide()
-      }
+      if (isWindowAlive()) mainWindow!.hide()
     }
   })
 
   // Notify renderer when window visibility changes (for polling pause)
   mainWindow.on('show', () => {
-    if (isWindowAlive()) {
-      mainWindow!.webContents.send('app:visibility', true)
-      if (process.platform === 'darwin') app.dock?.show()
-    }
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', true)
   })
   mainWindow.on('hide', () => {
-    if (isWindowAlive()) {
-      mainWindow!.webContents.send('app:visibility', false)
-      if (process.platform === 'darwin') app.dock?.hide()
-    }
+    if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
   })
   mainWindow.on('minimize', () => {
     if (isWindowAlive()) mainWindow!.webContents.send('app:visibility', false)
@@ -145,7 +133,6 @@ function createTray(): void {
         if (isWindowAlive()) {
           mainWindow!.show()
           mainWindow!.focus()
-          if (process.platform === 'darwin') app.dock?.show()
         }
       }
     },
@@ -176,11 +163,9 @@ function createTray(): void {
     if (isWindowAlive()) {
       if (mainWindow!.isVisible()) {
         mainWindow!.hide()
-        if (process.platform === 'darwin') app.dock?.hide()
       } else {
         mainWindow!.show()
         mainWindow!.focus()
-        if (process.platform === 'darwin') app.dock?.show()
       }
     }
   })
@@ -217,7 +202,6 @@ app.whenReady().then(() => {
     if (isWindowAlive()) {
       mainWindow!.show()
       mainWindow!.focus()
-      if (process.platform === 'darwin') app.dock?.show()
     }
   })
 })
@@ -227,7 +211,7 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
-  // Keep running in tray
+  // Keep running in tray — do not quit
 })
 
 // Extend app types for isQuitting flag

@@ -86,16 +86,10 @@ export function checkForUpdates(): void {
 }
 
 export function installUpdate(): void {
-  // Set isQuitting so the close handler doesn't intercept and hide to tray
+  // Set isQuitting so the close handler lets windows close instead of hiding to tray
   app.isQuitting = true
-  // Clear window reference before closing to prevent 'destroyed' errors
+  // Clear window reference to prevent 'destroyed' errors in sendStatus
   mainWindow = null
-  // Force-close all windows so nothing blocks the quit
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.removeAllListeners('close')
-    win.close()
-  }
-  setImmediate(() => {
-    autoUpdater.quitAndInstall(false, true)
-  })
+  // quitAndInstall: isSilent=false (show progress), isForceRunAfter=true (relaunch app after install)
+  autoUpdater.quitAndInstall(false, true)
 }
