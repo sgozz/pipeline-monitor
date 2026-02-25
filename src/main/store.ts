@@ -10,6 +10,7 @@ export interface AppSettings {
 
 interface StoreSchema extends AppSettings {
   favorites: string[] // list of fullnames marked as favorite
+  pinnedFolders: string[] // list of folder names pinned to top
 }
 
 const defaults: StoreSchema = {
@@ -18,7 +19,8 @@ const defaults: StoreSchema = {
   jenkinsToken: '',
   refreshInterval: 30,
   showNotifications: true,
-  favorites: []
+  favorites: [],
+  pinnedFolders: []
 }
 
 const store = new Store<StoreSchema>({
@@ -68,4 +70,15 @@ export function toggleFavorite(fullname: string): string[] {
 
 export function isFavorite(fullname: string): boolean {
   return getFavorites().includes(fullname)
+}
+
+// ─── Pinned Folders ─────────────────────────────────────────
+
+export function getPinnedFolders(): string[] {
+  return store.get('pinnedFolders') || []
+}
+
+export function setPinnedFolders(folders: string[]): string[] {
+  store.set('pinnedFolders', folders)
+  return folders
 }

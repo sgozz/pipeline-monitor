@@ -34,7 +34,10 @@ const api = {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (settings: Record<string, unknown>) => ipcRenderer.invoke('settings:set', settings),
     isConfigured: () => ipcRenderer.invoke('settings:is-configured'),
-    testConnection: () => ipcRenderer.invoke('settings:test-connection')
+    testConnection: () => ipcRenderer.invoke('settings:test-connection'),
+    getPinnedFolders: (): Promise<string[]> => ipcRenderer.invoke('settings:get-pinned-folders'),
+    setPinnedFolders: (folders: string[]): Promise<string[]> =>
+      ipcRenderer.invoke('settings:set-pinned-folders', folders)
   },
   favorites: {
     get: (): Promise<string[]> => ipcRenderer.invoke('favorites:get'),

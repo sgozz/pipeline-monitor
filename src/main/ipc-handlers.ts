@@ -1,6 +1,6 @@
 import { app, ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
-import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite } from './store'
+import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite, getPinnedFolders, setPinnedFolders } from './store'
 import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
 import { apiCache, CacheTTL } from './cache'
 
@@ -223,6 +223,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('favorites:get', () => getFavorites())
 
   ipcMain.handle('favorites:toggle', (_, fullname: string) => toggleFavorite(fullname))
+
+  ipcMain.handle('settings:get-pinned-folders', () => getPinnedFolders())
+
+  ipcMain.handle('settings:set-pinned-folders', (_, folders: string[]) => setPinnedFolders(folders))
 
   // ─── Updater ─────────────────────────────────────────────
   ipcMain.handle('updater:get-status', () => getUpdateStatus())

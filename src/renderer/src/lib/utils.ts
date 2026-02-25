@@ -216,6 +216,49 @@ export function groupHierarchically(items: JenkinsItem[]): FolderGroup[] {
 }
 
 /**
+ * Status priority for sorting: failed first, then running, then unstable, etc.
+ */
+function colorPriority(color: string): number {
+  const base = color?.replace('_anime', '') || 'notbuilt'
+  const isAnimated = color?.endsWith('_anime')
+  // Failed running > Failed > Running > Unstable > Success > rest
+  if (base === 'red' && isAnimated) return 0
+  if (base === 'red') return 1
+  if (isAnimated) return 2
+  if (base === 'yellow') return 3
+  if (base === 'blue' || base === 'green') return 4
+  if (base === 'aborted') return 5
+  return 6
+}
+
+/**
+ * Sort jobs by status priority (failed first), then alphabetically by name
+ */
+export function sortJobsByStatus(items: JenkinsItem[]): JenkinsItem[] {
+  return [...items].sort((a, b) => {
+    const pa = colorPriority(a.color)
+    const pb = colorPriority(b.color)
+    if (pa !== pb) return pa - pb
+    return a.fullname.localeCompare(b.fullname)
+  })
+}
+
+/**
+ * Sort folder groups with pinned folders first, then alphabetically
+ */
+export function sortFolderGroups(groups: FolderGroup[], pinned: string[]): FolderGroup[] {
+  const pinnedSet = new Set(pinned)
+  return [...groups].sort((a, b) => {
+    const aPin = pinnedSet.has(a.folder)
+    const bPin = pinnedSet.has(b.folder)
+    if (aPin && !bPin) return -1
+    if (!aPin && bPin) return 1
+    if (aPin && bPin) return pinned.indexOf(a.folder) - pinned.indexOf(b.folder)
+    return a.folder.localeCompare(b.folder)
+  })
+}
+
+/**
  * Simple ANSI to HTML converter for Jenkins console output
  */
 export function ansiToHtml(text: string): string {

@@ -6,10 +6,12 @@ import {
   ChevronRight,
   Folder,
   GitBranch,
-  Star
+  Star,
+  Pin,
+  PinOff
 } from 'lucide-react'
 import { useJenkinsItems } from '../hooks/useJenkins'
-import { colorToStatus, groupHierarchically } from '../lib/utils'
+import { colorToStatus, groupHierarchically, sortFolderGroups, sortJobsByStatus } from '../lib/utils'
 
 interface Props {
   onOpenJob: (fullname: string) => void
@@ -22,16 +24,29 @@ export default function Dashboard({ onOpenJob }: Props) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [pinnedFolders, setPinnedFolders] = useState<string[]>([])
 
-  // Load favorites on mount
+  // Load favorites and pinned folders on mount
   useEffect(() => {
     window.api.favorites.get().then((favs) => setFavorites(new Set(favs)))
+    window.api.settings.getPinnedFolders().then(setPinnedFolders).catch(() => {})
   }, [])
 
   const toggleFavorite = useCallback(async (e: React.MouseEvent, fullname: string) => {
     e.stopPropagation()
     const updated = await window.api.favorites.toggle(fullname)
     setFavorites(new Set(updated))
+  }, [])
+
+  const togglePin = useCallback((e: React.MouseEvent, folder: string) => {
+    e.stopPropagation()
+    setPinnedFolders((prev) => {
+      const next = prev.includes(folder)
+        ? prev.filter((f) => f !== folder)
+        : [...prev, folder]
+      window.api.settings.setPinnedFolders(next).catch(() => {})
+      return next
+    })
   }, [])
 
   const filtered = useMemo(() => {
@@ -46,6 +61,10 @@ export default function Dashboard({ onOpenJob }: Props) {
   }, [items, search])
 
   const grouped = useMemo(() => groupHierarchically(filtered), [filtered])
+  const sortedGroups = useMemo(
+    () => sortFolderGroups(grouped, pinnedFolders),
+    [grouped, pinnedFolders]
+  )
 
   const favoriteItems = useMemo(() => {
     if (!items || favorites.size === 0) return []
@@ -55,16 +74,16 @@ export default function Dashboard({ onOpenJob }: Props) {
   // Auto-expand all folders and jobs when searching
   useMemo(() => {
     if (search) {
-      setExpandedFolders(new Set(grouped.map((g) => g.folder)))
+      setExpandedFolders(new Set(sortedGroups.map((g) => g.folder)))
       const allJobKeys = new Set<string>()
-      for (const fg of grouped) {
+      for (const fg of sortedGroups) {
         for (const jg of fg.jobs) {
           allJobKeys.add(`${fg.folder}/${jg.job}`)
         }
       }
       setExpandedJobs(allJobKeys)
     }
-  }, [search, grouped])
+  }, [search, sortedGroups])
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) => {
@@ -175,8 +194,9 @@ export default function Dashboard({ onOpenJob }: Props) {
             )}
 
             {/* Folder > Job > Branch hierarchy */}
-            {grouped.map((folderGroup) => {
+            {sortedGroups.map((folderGroup) => {
               const isExpanded = expandedFolders.has(folderGroup.folder)
+              const isPinned = pinnedFolders.includes(folderGroup.folder)
               const failedCount = folderGroup.allItems.filter(
                 (j) => j.color === 'red' || j.color === 'red_anime'
               ).length
@@ -189,14 +209,22 @@ export default function Dashboard({ onOpenJob }: Props) {
                   {/* Folder header */}
                   <button
                     onClick={() => toggleFolder(folderGroup.folder)}
-                    className="w-full flex items-center gap-2 px-4 py-2 bg-slate-900/50 hover:bg-slate-900 transition text-sm"
+                    className={`w-full flex items-center gap-2 px-4 py-2 hover:bg-slate-900 transition text-sm ${
+                      isPinned ? 'bg-slate-900/80' : 'bg-slate-900/50'
+                    }`}
                   >
                     <ChevronRight
                       size={14}
                       className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                     />
-                    <Folder size={14} className="text-slate-500" />
-                    <span className="font-medium text-slate-300">{folderGroup.folder}</span>
+                    {isPinned ? (
+                      <Pin size={14} className="text-amber-400" />
+                    ) : (
+                      <Folder size={14} className="text-slate-500" />
+                    )}
+                    <span className={`font-medium ${isPinned ? 'text-slate-200' : 'text-slate-300'}`}>
+                      {folderGroup.folder}
+                    </span>
                     <span className="text-xs text-slate-500">({folderGroup.allItems.length})</span>
                     {failedCount > 0 && (
                       <span className="ml-auto text-xs text-red-400 bg-red-400/10 px-1.5 rounded">
@@ -208,6 +236,17 @@ export default function Dashboard({ onOpenJob }: Props) {
                         {runningCount} running
                       </span>
                     )}
+                    <button
+                      onClick={(e) => togglePin(e, folderGroup.folder)}
+                      className={`${failedCount === 0 && runningCount === 0 ? 'ml-auto' : ''} p-0.5 rounded transition ${
+                        isPinned
+                          ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-400/10'
+                          : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+                      }`}
+                      title={isPinned ? 'Unpin folder' : 'Pin folder to top'}
+                    >
+                      {isPinned ? <PinOff size={12} /> : <Pin size={12} />}
+                    </button>
                   </button>
 
                   {/* Jobs in folder */}
@@ -217,10 +256,11 @@ export default function Dashboard({ onOpenJob }: Props) {
                         const jobKey = `${folderGroup.folder}/${jobGroup.job}`
                         const isJobExpanded = expandedJobs.has(jobKey)
                         const hasBranches = jobGroup.branches.length > 1
-                        const jobFailed = jobGroup.branches.filter(
+                        const sortedBranches = sortJobsByStatus(jobGroup.branches)
+                        const jobFailed = sortedBranches.filter(
                           (j) => j.color === 'red' || j.color === 'red_anime'
                         ).length
-                        const jobRunning = jobGroup.branches.filter(
+                        const jobRunning = sortedBranches.filter(
                           (j) => j.color?.endsWith('_anime')
                         ).length
 
@@ -228,9 +268,9 @@ export default function Dashboard({ onOpenJob }: Props) {
                         if (!hasBranches) {
                           return (
                             <BranchRow
-                              key={jobGroup.branches[0].fullname}
-                              item={jobGroup.branches[0]}
-                              isFavorite={favorites.has(jobGroup.branches[0].fullname)}
+                              key={sortedBranches[0].fullname}
+                              item={sortedBranches[0]}
+                              isFavorite={favorites.has(sortedBranches[0].fullname)}
                               onOpenJob={onOpenJob}
                               onToggleFavorite={toggleFavorite}
                               onTriggerBuild={handleTriggerBuild}
@@ -253,7 +293,7 @@ export default function Dashboard({ onOpenJob }: Props) {
                               />
                               <GitBranch size={12} className="text-slate-600" />
                               <span className="text-slate-400 text-xs font-medium">{jobGroup.job}</span>
-                              <span className="text-xs text-slate-600">({jobGroup.branches.length})</span>
+                              <span className="text-xs text-slate-600">({sortedBranches.length})</span>
                               {jobFailed > 0 && (
                                 <span className="ml-auto text-[10px] text-red-400 bg-red-400/10 px-1 rounded">
                                   {jobFailed}
@@ -269,7 +309,7 @@ export default function Dashboard({ onOpenJob }: Props) {
                             {/* Branches */}
                             {isJobExpanded && (
                               <div>
-                                {jobGroup.branches.map((item) => (
+                                {sortedBranches.map((item) => (
                                   <BranchRow
                                     key={item.fullname}
                                     item={item}
