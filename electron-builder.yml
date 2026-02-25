@@ -24,3 +24,7 @@ linux:
   target:
     - AppImage
     - deb
+publish:
+  provider: github
+  owner: sgozz
+  repo: pipeline-monitor

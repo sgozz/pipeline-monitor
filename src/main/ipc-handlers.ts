@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
 import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite } from './store'
+import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
 
 let api: JenkinsAPI | null = null
 
@@ -144,4 +145,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('favorites:get', () => getFavorites())
 
   ipcMain.handle('favorites:toggle', (_, fullname: string) => toggleFavorite(fullname))
+
+  // ─── Updater ─────────────────────────────────────────────
+  ipcMain.handle('updater:get-status', () => getUpdateStatus())
+
+  ipcMain.handle('updater:check', () => {
+    checkForUpdates()
+  })
+
+  ipcMain.handle('updater:install', () => {
+    installUpdate()
+  })
 }

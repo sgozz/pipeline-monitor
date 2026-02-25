@@ -13,10 +13,12 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "publish": "electron-builder --publish always"
   },
   "dependencies": {
     "electron-store": "^10.0.0",
+    "electron-updater": "^6.8.3",
     "lucide-react": "^0.468.0"
   },
   "devDependencies": {

@@ -4,7 +4,10 @@ import {
   Server,
   ListOrdered,
   Settings as SettingsIcon,
-  Activity
+  Activity,
+  Download,
+  RefreshCw,
+  X
 } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NodesView from './components/NodesView'
@@ -33,11 +36,22 @@ export default function App() {
   const isReady = configured === true
   const { data: runningBuilds } = useRunningBuilds(isReady ? 10000 : 0)
   const { data: queueItems } = useQueue(isReady ? 10000 : 0)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
+  const [updateDismissed, setUpdateDismissed] = useState(false)
 
   useEffect(() => {
     window.api.settings.isConfigured().then(setConfigured)
     window.api.onNavigate((target) => {
       if (target === 'settings') setPage({ id: 'settings' })
+    })
+  }, [])
+
+  // Listen for auto-update events
+  useEffect(() => {
+    window.api.updater.getStatus().then(setUpdateStatus)
+    window.api.updater.onStatus((status) => {
+      setUpdateStatus(status as UpdateStatus)
+      setUpdateDismissed(false)
     })
   }, [])
 
@@ -114,19 +128,57 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-slate-950">
-        {page.id === 'dashboard' && <Dashboard onOpenJob={openJob} />}
-        {page.id === 'job' && (
-          <JobDetail
-            fullname={page.fullname}
-            onBack={() => navigate('dashboard')}
-          />
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+        {/* Update banner */}
+        {!updateDismissed && updateStatus.status === 'ready' && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-emerald-900/50 border-b border-emerald-700/50 text-sm">
+            <Download size={14} className="text-emerald-400" />
+            <span className="text-emerald-200 flex-1">
+              Version {updateStatus.version} is ready to install
+            </span>
+            <button
+              onClick={() => window.api.updater.install()}
+              className="px-3 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-500 transition"
+            >
+              Restart & Update
+            </button>
+            <button
+              onClick={() => setUpdateDismissed(true)}
+              className="p-1 text-emerald-400 hover:text-emerald-200 transition"
+            >
+              <X size={14} />
+            </button>
+          </div>
         )}
-        {page.id === 'nodes' && <NodesView />}
-        {page.id === 'queue' && <QueueView />}
-        {page.id === 'settings' && (
-          <SettingsPage onSaved={() => setConfigured(true)} />
+        {!updateDismissed && updateStatus.status === 'downloading' && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-blue-900/30 border-b border-blue-700/30 text-sm">
+            <RefreshCw size={14} className="text-blue-400 animate-spin" />
+            <span className="text-blue-200 flex-1">
+              Downloading update... {updateStatus.progress ?? 0}%
+            </span>
+            <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all"
+                style={{ width: `${updateStatus.progress ?? 0}%` }}
+              />
+            </div>
+          </div>
         )}
+
+        <div className="flex-1 overflow-auto">
+          {page.id === 'dashboard' && <Dashboard onOpenJob={openJob} />}
+          {page.id === 'job' && (
+            <JobDetail
+              fullname={page.fullname}
+              onBack={() => navigate('dashboard')}
+            />
+          )}
+          {page.id === 'nodes' && <NodesView />}
+          {page.id === 'queue' && <QueueView />}
+          {page.id === 'settings' && (
+            <SettingsPage onSaved={() => setConfigured(true)} />
+          )}
+        </div>
       </main>
     </div>
   )

@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 export type JenkinsAPI = typeof api.jenkins
 export type SettingsAPI = typeof api.settings
 export type FavoritesAPI = typeof api.favorites
+export type UpdaterAPI = typeof api.updater
 
 const api = {
   jenkins: {
@@ -36,6 +37,14 @@ const api = {
   favorites: {
     get: (): Promise<string[]> => ipcRenderer.invoke('favorites:get'),
     toggle: (fullname: string): Promise<string[]> => ipcRenderer.invoke('favorites:toggle', fullname)
+  },
+  updater: {
+    getStatus: () => ipcRenderer.invoke('updater:get-status'),
+    check: () => ipcRenderer.invoke('updater:check'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    onStatus: (callback: (status: unknown) => void) => {
+      ipcRenderer.on('updater:status', (_, status) => callback(status))
+    }
   },
   onNavigate: (callback: (page: string) => void) => {
     ipcRenderer.on('navigate', (_, page) => callback(page))

@@ -67,6 +67,13 @@ interface AppSettings {
   showNotifications: boolean
 }
 
+interface UpdateStatus {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+  version?: string
+  progress?: number
+  error?: string
+}
+
 declare global {
   interface Window {
     api: {
@@ -95,6 +102,12 @@ declare global {
       favorites: {
         get: () => Promise<string[]>
         toggle: (fullname: string) => Promise<string[]>
+      }
+      updater: {
+        getStatus: () => Promise<UpdateStatus>
+        check: () => Promise<void>
+        install: () => Promise<void>
+        onStatus: (callback: (status: UpdateStatus) => void) => void
       }
       onNavigate: (callback: (page: string) => void) => void
     }

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { isConfigured } from './store'
+import { initAutoUpdater } from './updater'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -141,6 +142,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   createWindow()
   createTray()
+  initAutoUpdater(mainWindow!)
 
   // If not configured, show settings immediately
   if (!isConfigured()) {

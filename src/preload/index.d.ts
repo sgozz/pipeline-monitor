@@ -1,4 +1,4 @@
-import type { JenkinsAPI, SettingsAPI, FavoritesAPI } from './index'
+import type { JenkinsAPI, SettingsAPI, FavoritesAPI, UpdaterAPI } from './index'
 
 declare global {
   interface Window {
@@ -6,6 +6,7 @@ declare global {
       jenkins: JenkinsAPI
       settings: SettingsAPI
       favorites: FavoritesAPI
+      updater: UpdaterAPI
       onNavigate: (callback: (page: string) => void) => void
     }
   }
