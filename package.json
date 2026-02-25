@@ -1,6 +1,6 @@
 {
   "name": "jenkins-ui",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Simplified Jenkins dashboard - system tray app",
   "author": {
     "name": "sgozz",
