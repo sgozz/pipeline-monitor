@@ -15,6 +15,7 @@ import {
 import { useJenkinsItems } from '../hooks/useJenkins'
 import { colorToStatus, groupHierarchically, sortFolderGroups, sortJobsByStatus } from '../lib/utils'
 import BuildParamsDialog from './BuildParamsDialog'
+import FailedTestsInline from './FailedTestsInline'
 
 type StatusFilter = 'all' | 'failed' | 'running' | 'unstable' | 'success'
 
@@ -320,19 +321,31 @@ export default function Dashboard({ onOpenJob, searchInputRef }: Props) {
                   <span className="text-xs text-slate-500">({favoriteItems.length})</span>
                 </div>
                 <div>
-                  {favoriteItems.map((item) => (
-                    <BranchRow
-                      key={`fav-${item.fullname}`}
-                      item={item}
-                      isFavorite={true}
-                      showFullPath
-                      onOpenJob={onOpenJob}
-                      onToggleFavorite={toggleFavorite}
-                      onTriggerBuild={handleTriggerBuild}
-                      triggeringJob={triggeringJob}
-                      indent={1}
-                    />
-                  ))}
+                  {favoriteItems.map((item) => {
+                    const base = item.color?.replace('_anime', '') || 'notbuilt'
+                    const hasFailed = base === 'red' || base === 'yellow'
+                    return (
+                      <div key={`fav-${item.fullname}`}>
+                        <BranchRow
+                          item={item}
+                          isFavorite={true}
+                          showFullPath
+                          onOpenJob={onOpenJob}
+                          onToggleFavorite={toggleFavorite}
+                          onTriggerBuild={handleTriggerBuild}
+                          triggeringJob={triggeringJob}
+                          indent={1}
+                        />
+                        {hasFailed && item.lastBuild && (
+                          <FailedTestsInline
+                            fullname={item.fullname}
+                            buildNumber={item.lastBuild.number}
+                            onOpenTestResults={() => onOpenJob(item.fullname)}
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
