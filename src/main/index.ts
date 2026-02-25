@@ -67,34 +67,12 @@ function createWindow(): void {
 }
 
 function createTrayIcon(): nativeImage {
-  // Create a simple tray icon (16x16 for macOS)
-  // Using a template image for proper dark/light mode support on macOS
-  const size = 16
-  const canvas = Buffer.alloc(size * size * 4)
-
-  // Draw a simple "J" shape in white
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const idx = (y * size + x) * 4
-      let alpha = 0
-
-      // Top bar of J (y: 2-4, x: 3-12)
-      if (y >= 2 && y <= 4 && x >= 3 && x <= 12) alpha = 255
-      // Vertical bar (y: 2-11, x: 8-10)
-      if (y >= 2 && y <= 11 && x >= 8 && x <= 10) alpha = 255
-      // Bottom curve (y: 10-13, x: 3-10)
-      if (y >= 10 && y <= 12 && x >= 3 && x <= 10) alpha = 255
-      // Left edge of curve (y: 8-11, x: 3-5)
-      if (y >= 8 && y <= 11 && x >= 3 && x <= 5) alpha = 255
-
-      canvas[idx] = 0 // R
-      canvas[idx + 1] = 0 // G
-      canvas[idx + 2] = 0 // B
-      canvas[idx + 3] = alpha // A
-    }
-  }
-
-  const image = nativeImage.createFromBuffer(canvas, { width: size, height: size })
+  // In production: extraResources are in process.resourcesPath
+  // In dev: use the build directory directly
+  const trayPath = is.dev
+    ? join(__dirname, '../../build/trayTemplate.png')
+    : join(process.resourcesPath, 'trayTemplate.png')
+  const image = nativeImage.createFromPath(trayPath)
   image.setTemplateImage(true)
   return image
 }
