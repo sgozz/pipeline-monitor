@@ -28,7 +28,13 @@ const api = {
     getAllNodes: () => ipcRenderer.invoke('jenkins:get-all-nodes'),
     getNode: (name: string) => ipcRenderer.invoke('jenkins:get-node', name),
     getQueueItems: () => ipcRenderer.invoke('jenkins:get-queue-items'),
-    cancelQueueItem: (id: number) => ipcRenderer.invoke('jenkins:cancel-queue-item', id)
+    cancelQueueItem: (id: number) => ipcRenderer.invoke('jenkins:cancel-queue-item', id),
+    getPendingInputs: (fullname: string, number?: number) =>
+      ipcRenderer.invoke('jenkins:get-pending-inputs', fullname, number),
+    submitInput: (fullname: string, number: number, inputId: string, params?: Record<string, string>) =>
+      ipcRenderer.invoke('jenkins:submit-input', fullname, number, inputId, params),
+    abortInput: (fullname: string, number: number, inputId: string) =>
+      ipcRenderer.invoke('jenkins:abort-input', fullname, number, inputId)
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
@@ -56,6 +62,9 @@ const api = {
   },
   onVisibilityChange: (callback: (visible: boolean) => void) => {
     ipcRenderer.on('app:visibility', (_, visible) => callback(visible))
+  },
+  onPendingInput: (callback: (data: { fullname: string; buildNumber: number; input: unknown }) => void) => {
+    ipcRenderer.on('jenkins:pending-input', (_, data) => callback(data))
   },
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:get-version')
 }

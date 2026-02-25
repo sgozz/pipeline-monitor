@@ -34,6 +34,24 @@ interface JenkinsStage {
   pauseDurationMillis: number
 }
 
+interface JenkinsInputParameter {
+  name: string
+  type: string
+  description?: string
+  defaultValue?: string
+  choices?: string[]
+}
+
+interface JenkinsPendingInput {
+  id: string
+  message: string
+  proceedText?: string
+  abortUrl?: string
+  proceedUrl?: string
+  redirectApprovalUrl?: string
+  parameters?: JenkinsInputParameter[]
+}
+
 interface JenkinsRunningBuild {
   number: number
   url: string
@@ -102,6 +120,9 @@ declare global {
         getQueueItems: () => Promise<JenkinsQueueItem[]>
         cancelQueueItem: (id: number) => Promise<void>
         getStages: (fullname: string, number?: number) => Promise<JenkinsStage[]>
+        getPendingInputs: (fullname: string, number?: number) => Promise<JenkinsPendingInput[]>
+        submitInput: (fullname: string, number: number, inputId: string, params?: Record<string, string>) => Promise<void>
+        abortInput: (fullname: string, number: number, inputId: string) => Promise<void>
       }
       settings: {
         get: () => Promise<AppSettings>
@@ -121,7 +142,9 @@ declare global {
       }
       onNavigate: (callback: (page: string) => void) => void
       onVisibilityChange: (callback: (visible: boolean) => void) => void
+      onPendingInput: (callback: (data: { fullname: string; buildNumber: number; input: JenkinsPendingInput }) => void) => void
       getVersion: () => Promise<string>
+    }
   }
 }
 

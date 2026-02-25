@@ -9,11 +9,13 @@ import {
   RefreshCw,
   Terminal,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  MessageSquare
 } from 'lucide-react'
 import { useBuildHistory } from '../hooks/useJenkins'
 import { resultToStyle, formatDuration, timeAgo, formatTime, parseFullname } from '../lib/utils'
 import ConsoleOutput from './ConsoleOutput'
+import InputDialog from './InputDialog'
 
 interface Props {
   fullname: string
@@ -242,7 +244,7 @@ export default function JobDetail({ fullname, onBack }: Props) {
 
                   {/* Stages panel */}
                   {isExpanded && (
-                    <StagesPanel fullname={fullname} buildNumber={build.number} />
+                    <StagesPanel fullname={fullname} buildNumber={build.number} isBuilding={isRunning} />
                   )}
                 </div>
               )
@@ -258,13 +260,23 @@ export default function JobDetail({ fullname, onBack }: Props) {
 const stagesCache = new Map<string, JenkinsStage[]>()
 
 /** Lazy-loaded stages panel for a single build */
-function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber: number }) {
+function StagesPanel({
+  fullname,
+  buildNumber,
+  isBuilding
+}: {
+  fullname: string
+  buildNumber: number
+  isBuilding?: boolean
+}) {
   const cacheKey = `${fullname}:${buildNumber}`
   const [stages, setStages] = useState<JenkinsStage[] | null>(
     stagesCache.get(cacheKey) ?? null
   )
   const [loading, setLoading] = useState(!stagesCache.has(cacheKey))
   const [error, setError] = useState(false)
+  const [pendingInputs, setPendingInputs] = useState<JenkinsPendingInput[]>([])
+  const [activeInput, setActiveInput] = useState<JenkinsPendingInput | null>(null)
 
   const fetchStages = useCallback(async () => {
     // Skip fetch if we already have cached completed stages
@@ -284,6 +296,15 @@ function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber:
       if (isCompleted) {
         stagesCache.set(cacheKey, data)
       }
+
+      // Check for pending inputs if any stage is paused
+      const hasPaused = data.some((s) => s.status === 'PAUSED_PENDING_INPUT')
+      if (hasPaused) {
+        const inputs = await window.api.jenkins.getPendingInputs(fullname, buildNumber)
+        setPendingInputs(inputs)
+      } else {
+        setPendingInputs([])
+      }
     } catch {
       setError(true)
     } finally {
@@ -293,7 +314,20 @@ function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber:
 
   useEffect(() => {
     fetchStages()
-  }, [fetchStages])
+    // If building, poll stages more frequently to catch input prompts
+    if (isBuilding) {
+      const timer = setInterval(fetchStages, 10000)
+      return () => clearInterval(timer)
+    }
+  }, [fetchStages, isBuilding])
+
+  const handleInputDone = () => {
+    setActiveInput(null)
+    setPendingInputs([])
+    // Refresh stages after input action
+    stagesCache.delete(cacheKey)
+    fetchStages()
+  }
 
   if (loading) {
     return (
@@ -316,23 +350,60 @@ function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber:
 
   return (
     <div className="px-6 py-3 bg-slate-900/30 border-t border-slate-800/30">
+      {/* Pending Input banner */}
+      {pendingInputs.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {pendingInputs.map((input) => (
+            <div
+              key={input.id}
+              className="flex items-center gap-3 px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10"
+            >
+              <MessageSquare size={14} className="text-amber-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-amber-200 truncate">{input.message}</p>
+                {input.parameters && input.parameters.length > 0 && (
+                  <p className="text-xs text-amber-400/60 mt-0.5">
+                    {input.parameters.length} parameter{input.parameters.length !== 1 ? 's' : ''} required
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setActiveInput(input)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-500 text-slate-900 rounded hover:bg-amber-400 transition shrink-0"
+              >
+                Respond
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Pipeline visualization: connected stage boxes */}
       <div className="flex items-center gap-1 overflow-x-auto pb-2">
         {stages.map((stage, i) => {
           const style = getStageStyle(stage.status)
+          const isPaused = stage.status === 'PAUSED_PENDING_INPUT'
           return (
             <div key={stage.id} className="flex items-center shrink-0">
               {i > 0 && (
                 <div className="w-4 h-px bg-slate-700 shrink-0" />
               )}
               <div
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs ${style.bg}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs ${style.bg} ${isPaused ? 'cursor-pointer hover:brightness-125' : ''}`}
                 title={`${stage.name}: ${stage.status} (${formatDuration(stage.durationMillis)})`}
+                onClick={() => {
+                  if (isPaused && pendingInputs.length > 0) {
+                    setActiveInput(pendingInputs[0])
+                  }
+                }}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
                 <span className={`${style.text} whitespace-nowrap font-medium`}>
                   {stage.name}
                 </span>
+                {isPaused && (
+                  <MessageSquare size={10} className="text-amber-400" />
+                )}
                 {stage.durationMillis > 0 && (
                   <span className="text-slate-500 whitespace-nowrap">
                     {formatDuration(stage.durationMillis)}
@@ -367,6 +438,17 @@ function StagesPanel({ fullname, buildNumber }: { fullname: string; buildNumber:
           )
         })}
       </div>
+
+      {/* Input Dialog */}
+      {activeInput && (
+        <InputDialog
+          fullname={fullname}
+          buildNumber={buildNumber}
+          input={activeInput}
+          onDone={handleInputDone}
+          onCancel={() => setActiveInput(null)}
+        />
+      )}
     </div>
   )
 }

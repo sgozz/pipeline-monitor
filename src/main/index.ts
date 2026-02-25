@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { isConfigured } from './store'
 import { initAutoUpdater } from './updater'
+import { initNotifier } from './notifier'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -135,7 +136,7 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
   initAutoUpdater(mainWindow!)
-
+  initNotifier(mainWindow!)
   // If not configured, show settings immediately
   if (!isConfigured()) {
     mainWindow?.webContents.once('did-finish-load', () => {

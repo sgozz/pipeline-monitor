@@ -7,7 +7,8 @@ import {
   Activity,
   Download,
   RefreshCw,
-  X
+  X,
+  MessageSquare
 } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NodesView from './components/NodesView'
@@ -39,11 +40,19 @@ export default function App() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [appVersion, setAppVersion] = useState('')
+  const [pendingInputCount, setPendingInputCount] = useState(0)
   useEffect(() => {
     window.api.settings.isConfigured().then(setConfigured)
     window.api.getVersion().then(setAppVersion)
     window.api.onNavigate((target) => {
       if (target === 'settings') setPage({ id: 'settings' })
+    })
+  }, [])
+
+  // Listen for pending input events from the main process
+  useEffect(() => {
+    window.api.onPendingInput(() => {
+      setPendingInputCount((c) => c + 1)
     })
   }, [])
 
@@ -120,6 +129,16 @@ export default function App() {
             )
           })}
         </div>
+
+        {/* Pending inputs indicator */}
+        {pendingInputCount > 0 && (
+          <div className="px-4 py-3 border-t border-slate-800">
+            <div className="flex items-center gap-2 text-xs text-amber-400">
+              <MessageSquare size={12} className="animate-pulse" />
+              <span>{pendingInputCount} input{pendingInputCount !== 1 ? 's' : ''} waiting</span>
+            </div>
+          </div>
+        )}
 
         {/* Running builds indicator */}
         {runningCount > 0 && (

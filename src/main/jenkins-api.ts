@@ -44,6 +44,24 @@ export interface JenkinsStage {
   stageFlowNodes?: { id: string; name: string; status: string }[]
 }
 
+export interface JenkinsInputParameter {
+  name: string
+  type: string
+  description?: string
+  defaultValue?: string
+  choices?: string[]
+}
+
+export interface JenkinsPendingInput {
+  id: string
+  message: string
+  proceedText?: string
+  abortUrl?: string
+  proceedUrl?: string
+  redirectApprovalUrl?: string
+  parameters?: JenkinsInputParameter[]
+}
+
 export interface JenkinsPipelineRun {
   id: string
   name: string
@@ -343,6 +361,63 @@ export class JenkinsAPI {
 
   async cancelQueueItem(id: number): Promise<void> {
     await this.post(`/queue/cancelItem?id=${id}`)
+  }
+
+  // ─── Pipeline Input Steps ──────────────────────────────────
+
+  async getPendingInputActions(
+    fullname: string,
+    number?: number
+  ): Promise<JenkinsPendingInput[]> {
+    try {
+      const buildPath = number ? `/${number}` : '/lastBuild'
+      return await this.requestSimple<JenkinsPendingInput[]>(
+        `${fullnameToPath(fullname)}${buildPath}/wfapi/pendingInputActions`
+      )
+    } catch {
+      return []
+    }
+  }
+
+  async submitInputAction(
+    fullname: string,
+    number: number,
+    inputId: string,
+    params?: Record<string, string>
+  ): Promise<void> {
+    const buildPath = `/${number}`
+    if (params && Object.keys(params).length > 0) {
+      // Submit with parameters using wfapi/inputSubmit
+      const url = `${this.baseUrl}${fullnameToPath(fullname)}${buildPath}/wfapi/inputSubmit?inputId=${encodeURIComponent(inputId)}`
+      const body = JSON.stringify(params)
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: this.authHeader,
+          'Content-Type': 'application/json'
+        },
+        body
+      })
+      if (!res.ok && res.status !== 302) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`Failed to submit input: ${res.status} - ${text}`)
+      }
+    } else {
+      // Proceed without parameters
+      await this.post(
+        `${fullnameToPath(fullname)}${buildPath}/input/${encodeURIComponent(inputId)}/proceedEmpty`
+      )
+    }
+  }
+
+  async abortInputAction(
+    fullname: string,
+    number: number,
+    inputId: string
+  ): Promise<void> {
+    await this.post(
+      `${fullnameToPath(fullname)}/${number}/input/${encodeURIComponent(inputId)}/abort`
+    )
   }
 
   // ─── Health Check ─────────────────────────────────────────────

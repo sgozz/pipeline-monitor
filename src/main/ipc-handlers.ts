@@ -3,6 +3,7 @@ import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
 import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite, getPinnedFolders, setPinnedFolders } from './store'
 import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
 import { apiCache, CacheTTL } from './cache'
+import { refreshNotifierApi } from './notifier'
 
 let api: JenkinsAPI | null = null
 
@@ -41,6 +42,7 @@ function refreshApi(): void {
   }
   // Clear cache when config changes — old data may be from a different server
   apiCache.clear()
+  refreshNotifierApi()
 }
 
 /**
@@ -219,6 +221,39 @@ export function registerIpcHandlers(): void {
     return result
   })
 
+  // ─── Pipeline Input Steps ──────────────────────────────
+  ipcMain.handle(
+    'jenkins:get-pending-inputs',
+    async (_, fullname: string, number?: number) => {
+      ensureConfigured()
+      return await getApi().getPendingInputActions(fullname, number)
+    }
+  )
+
+  ipcMain.handle(
+    'jenkins:submit-input',
+    async (_, fullname: string, number: number, inputId: string, params?: Record<string, string>) => {
+      ensureConfigured()
+      await getApi().submitInputAction(fullname, number, inputId, params)
+      // Invalidate relevant caches
+      apiCache.invalidate(`builds:${fullname}`)
+      apiCache.invalidate(`stages:${fullname}`)
+      apiCache.invalidate('running-builds')
+    }
+  )
+
+  ipcMain.handle(
+    'jenkins:abort-input',
+    async (_, fullname: string, number: number, inputId: string) => {
+      ensureConfigured()
+      await getApi().abortInputAction(fullname, number, inputId)
+      apiCache.invalidate(`builds:${fullname}`)
+      apiCache.invalidate(`stages:${fullname}`)
+      apiCache.invalidate('running-builds')
+    }
+  )
+
+
   // ─── Favorites ────────────────────────────────────────────
   ipcMain.handle('favorites:get', () => getFavorites())
 
@@ -244,5 +279,5 @@ export function registerIpcHandlers(): void {
 }
 
 // Re-export JenkinsStage type for the stages handler
-import type { JenkinsStage } from './jenkins-api'
-export type { JenkinsStage }
+import type { JenkinsStage, JenkinsPendingInput } from './jenkins-api'
+export type { JenkinsStage, JenkinsPendingInput }
