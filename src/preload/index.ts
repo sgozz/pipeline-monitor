@@ -20,6 +20,8 @@ const api = {
       ipcRenderer.invoke('jenkins:get-test-report', fullname, number),
     getStages: (fullname: string, number?: number) =>
       ipcRenderer.invoke('jenkins:get-stages', fullname, number),
+    getStageLog: (fullname: string, number: number, nodeId: string) =>
+      ipcRenderer.invoke('jenkins:get-stage-log', fullname, number, nodeId),
     getRunningBuilds: () => ipcRenderer.invoke('jenkins:get-running-builds'),
     buildItem: (fullname: string, params?: Record<string, string>) =>
       ipcRenderer.invoke('jenkins:build-item', fullname, params),
@@ -34,7 +36,10 @@ const api = {
     submitInput: (fullname: string, number: number, inputId: string, params?: Record<string, string>) =>
       ipcRenderer.invoke('jenkins:submit-input', fullname, number, inputId, params),
     abortInput: (fullname: string, number: number, inputId: string) =>
-      ipcRenderer.invoke('jenkins:abort-input', fullname, number, inputId)
+      ipcRenderer.invoke('jenkins:abort-input', fullname, number, inputId),
+    getViews: () => ipcRenderer.invoke('jenkins:get-views'),
+    getBuildParameters: (fullname: string) =>
+      ipcRenderer.invoke('jenkins:get-build-parameters', fullname)
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
@@ -44,6 +49,13 @@ const api = {
     getPinnedFolders: (): Promise<string[]> => ipcRenderer.invoke('settings:get-pinned-folders'),
     setPinnedFolders: (folders: string[]): Promise<string[]> =>
       ipcRenderer.invoke('settings:set-pinned-folders', folders)
+  },
+  profiles: {
+    get: () => ipcRenderer.invoke('profiles:get'),
+    save: (profile: { name: string; url: string; username: string; token: string }) =>
+      ipcRenderer.invoke('profiles:save', profile),
+    delete: (name: string) => ipcRenderer.invoke('profiles:delete', name),
+    load: (name: string) => ipcRenderer.invoke('profiles:load', name)
   },
   favorites: {
     get: (): Promise<string[]> => ipcRenderer.invoke('favorites:get'),

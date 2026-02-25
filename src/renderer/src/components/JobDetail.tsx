@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   ArrowLeft,
   Play,
@@ -10,12 +10,17 @@ import {
   Terminal,
   ChevronDown,
   ChevronRight,
-  MessageSquare
+  MessageSquare,
+  TestTube,
+  FileText,
+  GitCompare
 } from 'lucide-react'
 import { useBuildHistory } from '../hooks/useJenkins'
 import { resultToStyle, formatDuration, timeAgo, formatTime, parseFullname } from '../lib/utils'
 import ConsoleOutput from './ConsoleOutput'
 import InputDialog from './InputDialog'
+import TestResultsView from './TestResultsView'
+import StageLogView from './StageLogView'
 
 interface Props {
   fullname: string
@@ -64,12 +69,21 @@ function getStageStyle(status: string) {
   return stageStatusColor[status] || stageStatusColor.NOT_EXECUTED
 }
 
+// Sub-views for the job detail page
+type SubView =
+  | null
+  | { type: 'console'; buildNumber: number }
+  | { type: 'tests'; buildNumber: number }
+  | { type: 'stageLog'; buildNumber: number; stageId: string; stageName: string }
+  | { type: 'compare'; buildA: number; buildB: number }
+
 export default function JobDetail({ fullname, onBack }: Props) {
   const { data: builds, loading, refresh } = useBuildHistory(fullname, 30)
   const [selectedBuild, setSelectedBuild] = useState<number | null>(null)
-  const [showConsole, setShowConsole] = useState(false)
+  const [subView, setSubView] = useState<SubView>(null)
   const [triggeringBuild, setTriggeringBuild] = useState(false)
   const [expandedBuild, setExpandedBuild] = useState<number | null>(null)
+  const [comparePick, setComparePick] = useState<number | null>(null)
 
   const { folder, name } = parseFullname(fullname)
 
@@ -94,12 +108,58 @@ export default function JobDetail({ fullname, onBack }: Props) {
     }
   }
 
-  if (showConsole && selectedBuild !== null) {
+  // Duration trend sparkline data (last 20 completed builds)
+  const trendData = useMemo(() => {
+    if (!builds) return null
+    const completed = builds.filter((b) => !b.building && b.duration > 0).slice(0, 20).reverse()
+    if (completed.length < 2) return null
+    return completed.map((b) => ({
+      number: b.number,
+      duration: b.duration,
+      result: b.result
+    }))
+  }, [builds])
+
+  // Render sub-views
+  if (subView?.type === 'console') {
     return (
       <ConsoleOutput
         fullname={fullname}
-        buildNumber={selectedBuild}
-        onBack={() => setShowConsole(false)}
+        buildNumber={subView.buildNumber}
+        onBack={() => setSubView(null)}
+      />
+    )
+  }
+
+  if (subView?.type === 'tests') {
+    return (
+      <TestResultsView
+        fullname={fullname}
+        buildNumber={subView.buildNumber}
+        onBack={() => setSubView(null)}
+      />
+    )
+  }
+
+  if (subView?.type === 'stageLog') {
+    return (
+      <StageLogView
+        fullname={fullname}
+        buildNumber={subView.buildNumber}
+        stageId={subView.stageId}
+        stageName={subView.stageName}
+        onBack={() => setSubView(null)}
+      />
+    )
+  }
+
+  if (subView?.type === 'compare') {
+    return (
+      <BuildCompareView
+        fullname={fullname}
+        buildA={subView.buildA}
+        buildB={subView.buildB}
+        onBack={() => setSubView(null)}
       />
     )
   }
@@ -137,6 +197,33 @@ export default function JobDetail({ fullname, onBack }: Props) {
         </button>
       </div>
 
+      {/* Duration trend sparkline */}
+      {trendData && (
+        <div className="px-4 py-2 border-b border-slate-800/50 bg-slate-900/30">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock size={10} className="text-slate-600" />
+            <span className="text-[10px] text-slate-600 uppercase tracking-wider">Duration Trend</span>
+          </div>
+          <DurationSparkline data={trendData} />
+        </div>
+      )}
+
+      {/* Compare mode hint */}
+      {comparePick !== null && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-blue-900/30 border-b border-blue-700/30">
+          <GitCompare size={12} className="text-blue-400" />
+          <span className="text-xs text-blue-300">
+            Comparing #{comparePick} — click another build to compare
+          </span>
+          <button
+            onClick={() => setComparePick(null)}
+            className="ml-auto text-xs text-blue-400 hover:text-blue-200 transition"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Build history */}
       <div className="flex-1 overflow-auto">
         {loading && !builds ? (
@@ -161,7 +248,16 @@ export default function JobDetail({ fullname, onBack }: Props) {
                 <div key={build.number}>
                   <div
                     className="flex items-center gap-3 px-4 py-3 hover:bg-slate-900/50 transition group cursor-pointer"
-                    onClick={() => setExpandedBuild(isExpanded ? null : build.number)}
+                    onClick={() => {
+                      if (comparePick !== null) {
+                        if (comparePick !== build.number) {
+                          setSubView({ type: 'compare', buildA: comparePick, buildB: build.number })
+                          setComparePick(null)
+                        }
+                        return
+                      }
+                      setExpandedBuild(isExpanded ? null : build.number)
+                    }}
                   >
                     {/* Expand chevron */}
                     <span className="text-slate-600 w-3">
@@ -209,13 +305,32 @@ export default function JobDetail({ fullname, onBack }: Props) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          setSelectedBuild(build.number)
-                          setShowConsole(true)
+                          setSubView({ type: 'console', buildNumber: build.number })
                         }}
                         className="p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition"
                         title="Console output"
                       >
                         <Terminal size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSubView({ type: 'tests', buildNumber: build.number })
+                        }}
+                        className="p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition"
+                        title="Test results"
+                      >
+                        <TestTube size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setComparePick(build.number)
+                        }}
+                        className={`p-1 rounded transition ${comparePick === build.number ? 'text-blue-400 bg-blue-400/10' : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'}`}
+                        title="Compare with another build"
+                      >
+                        <GitCompare size={12} />
                       </button>
                       {isRunning && (
                         <button
@@ -244,7 +359,14 @@ export default function JobDetail({ fullname, onBack }: Props) {
 
                   {/* Stages panel */}
                   {isExpanded && (
-                    <StagesPanel fullname={fullname} buildNumber={build.number} isBuilding={isRunning} />
+                    <StagesPanel
+                      fullname={fullname}
+                      buildNumber={build.number}
+                      isBuilding={isRunning}
+                      onViewStageLog={(stageId, stageName) =>
+                        setSubView({ type: 'stageLog', buildNumber: build.number, stageId, stageName })
+                      }
+                    />
                   )}
                 </div>
               )
@@ -256,6 +378,42 @@ export default function JobDetail({ fullname, onBack }: Props) {
   )
 }
 
+/** Duration trend sparkline */
+function DurationSparkline({ data }: { data: { number: number; duration: number; result?: string }[] }) {
+  const max = Math.max(...data.map((d) => d.duration))
+  const height = 24
+  const width = Math.min(data.length * 12, 300)
+  const barWidth = Math.max(4, (width / data.length) - 2)
+
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      {data.map((d, i) => {
+        const h = Math.max(2, (d.duration / max) * height)
+        const x = i * (barWidth + 2)
+        const color = d.result === 'FAILURE' ? '#ef4444'
+          : d.result === 'UNSTABLE' ? '#eab308'
+          : d.result === 'ABORTED' ? '#64748b'
+          : '#22c55e'
+        return (
+          <g key={d.number}>
+            <rect
+              x={x}
+              y={height - h}
+              width={barWidth}
+              height={h}
+              rx={1}
+              fill={color}
+              opacity={0.7}
+            >
+              <title>#{d.number}: {formatDuration(d.duration)}</title>
+            </rect>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
 /** Local cache for completed build stages — avoids re-fetching on expand/collapse */
 const stagesCache = new Map<string, JenkinsStage[]>()
 
@@ -263,11 +421,13 @@ const stagesCache = new Map<string, JenkinsStage[]>()
 function StagesPanel({
   fullname,
   buildNumber,
-  isBuilding
+  isBuilding,
+  onViewStageLog
 }: {
   fullname: string
   buildNumber: number
   isBuilding?: boolean
+  onViewStageLog: (stageId: string, stageName: string) => void
 }) {
   const cacheKey = `${fullname}:${buildNumber}`
   const [stages, setStages] = useState<JenkinsStage[] | null>(
@@ -389,11 +549,13 @@ function StagesPanel({
                 <div className="w-4 h-px bg-slate-700 shrink-0" />
               )}
               <div
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs ${style.bg} ${isPaused ? 'cursor-pointer hover:brightness-125' : ''}`}
-                title={`${stage.name}: ${stage.status} (${formatDuration(stage.durationMillis)})`}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs ${style.bg} cursor-pointer hover:brightness-125 transition`}
+                title={`${stage.name}: ${stage.status} (${formatDuration(stage.durationMillis)}) — Click for log`}
                 onClick={() => {
                   if (isPaused && pendingInputs.length > 0) {
                     setActiveInput(pendingInputs[0])
+                  } else {
+                    onViewStageLog(stage.id, stage.name)
                   }
                 }}
               >
@@ -409,6 +571,7 @@ function StagesPanel({
                     {formatDuration(stage.durationMillis)}
                   </span>
                 )}
+                <FileText size={9} className="text-slate-600 ml-0.5" />
               </div>
             </div>
           )
@@ -421,7 +584,11 @@ function StagesPanel({
           const style = getStageStyle(stage.status)
           const widthPercent = Math.max(2, (stage.durationMillis / maxDuration) * 100)
           return (
-            <div key={stage.id} className="flex items-center gap-2">
+            <div
+              key={stage.id}
+              className="flex items-center gap-2 cursor-pointer hover:bg-slate-800/30 rounded transition px-1"
+              onClick={() => onViewStageLog(stage.id, stage.name)}
+            >
               <span className="text-[11px] text-slate-500 w-28 truncate text-right shrink-0">
                 {stage.name}
               </span>
@@ -448,6 +615,136 @@ function StagesPanel({
           onDone={handleInputDone}
           onCancel={() => setActiveInput(null)}
         />
+      )}
+    </div>
+  )
+}
+
+/** Build comparison view */
+function BuildCompareView({
+  fullname,
+  buildA,
+  buildB,
+  onBack
+}: {
+  fullname: string
+  buildA: number
+  buildB: number
+  onBack: () => void
+}) {
+  const [stagesA, setStagesA] = useState<JenkinsStage[] | null>(null)
+  const [stagesB, setStagesB] = useState<JenkinsStage[] | null>(null)
+  const [buildInfoA, setBuildInfoA] = useState<JenkinsBuild | null>(null)
+  const [buildInfoB, setBuildInfoB] = useState<JenkinsBuild | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      window.api.jenkins.getStages(fullname, buildA),
+      window.api.jenkins.getStages(fullname, buildB),
+      window.api.jenkins.getBuild(fullname, buildA),
+      window.api.jenkins.getBuild(fullname, buildB)
+    ]).then(([sA, sB, bA, bB]) => {
+      setStagesA(sA)
+      setStagesB(sB)
+      setBuildInfoA(bA)
+      setBuildInfoB(bB)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [fullname, buildA, buildB])
+
+  const allStageNames = useMemo(() => {
+    const names = new Set<string>()
+    stagesA?.forEach((s) => names.add(s.name))
+    stagesB?.forEach((s) => names.add(s.name))
+    return [...names]
+  }, [stagesA, stagesB])
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="titlebar-drag flex items-center gap-3 px-4 py-3 border-b border-slate-800">
+        <button
+          onClick={onBack}
+          className="titlebar-no-drag p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition"
+        >
+          <ArrowLeft size={16} />
+        </button>
+        <div className="titlebar-no-drag flex-1 min-w-0">
+          <h1 className="text-sm font-semibold text-slate-200">
+            Compare: #{buildA} vs #{buildB}
+          </h1>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-32">
+          <RefreshCw size={20} className="animate-spin text-slate-500" />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto p-4">
+          {/* Build summary comparison */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {[{ build: buildInfoA, num: buildA }, { build: buildInfoB, num: buildB }].map(({ build, num }) => {
+              const style = build ? resultToStyle(build.result) : { label: '?', class: 'text-slate-500', bgClass: 'bg-slate-800/50' }
+              return (
+                <div key={num} className={`p-3 rounded border ${style.bgClass}`}>
+                  <div className={`text-sm font-mono font-medium ${style.class}`}>#{num} — {style.label}</div>
+                  {build && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      Duration: {formatDuration(build.duration)} | {timeAgo(build.timestamp)}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Stage comparison table */}
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <th className="text-left py-2 text-slate-500 font-medium">Stage</th>
+                <th className="text-center py-2 text-slate-500 font-medium">#{buildA}</th>
+                <th className="text-center py-2 text-slate-500 font-medium">#{buildB}</th>
+                <th className="text-right py-2 text-slate-500 font-medium">Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allStageNames.map((name) => {
+                const sA = stagesA?.find((s) => s.name === name)
+                const sB = stagesB?.find((s) => s.name === name)
+                const delta = (sA?.durationMillis ?? 0) - (sB?.durationMillis ?? 0)
+                const deltaColor = delta > 0 ? 'text-red-400' : delta < 0 ? 'text-emerald-400' : 'text-slate-600'
+                return (
+                  <tr key={name} className="border-b border-slate-800/50">
+                    <td className="py-1.5 text-slate-300">{name}</td>
+                    <td className="py-1.5 text-center">
+                      {sA ? (
+                        <span className={getStageStyle(sA.status).text}>
+                          {formatDuration(sA.durationMillis)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-700">-</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-center">
+                      {sB ? (
+                        <span className={getStageStyle(sB.status).text}>
+                          {formatDuration(sB.durationMillis)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-700">-</span>
+                      )}
+                    </td>
+                    <td className={`py-1.5 text-right ${deltaColor}`}>
+                      {sA && sB ? (delta > 0 ? '+' : '') + formatDuration(Math.abs(delta)) : '-'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

@@ -45,3 +45,85 @@
 .ansi-bright-yellow { color: #facc15; }
 .ansi-bright-blue { color: #60a5fa; }
 .ansi-bold { font-weight: 700; }
+
+/* Console search highlighting */
+.console-search-match {
+  background: rgba(234, 179, 8, 0.25);
+  color: inherit;
+  border-radius: 2px;
+}
+.console-search-current {
+  background: rgba(234, 179, 8, 0.6);
+  color: #000;
+  border-radius: 2px;
+}
+
+/* ─── Light theme overrides ─── */
+html.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-sidebar: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Light theme — recolor dark slate backgrounds */
+html.light .bg-slate-950 { background-color: var(--bg-primary) !important; }
+html.light .bg-slate-900 { background-color: var(--bg-secondary) !important; }
+html.light .bg-slate-900\/50 { background-color: rgba(241, 245, 249, 0.5) !important; }
+html.light .bg-slate-900\/30 { background-color: rgba(241, 245, 249, 0.3) !important; }
+html.light .bg-slate-900\/80 { background-color: rgba(241, 245, 249, 0.8) !important; }
+html.light .bg-slate-800 { background-color: #e2e8f0 !important; }
+html.light .bg-slate-800\/50 { background-color: rgba(226, 232, 240, 0.5) !important; }
+
+/* Light theme — text */
+html.light .text-slate-200 { color: #0f172a !important; }
+html.light .text-slate-300 { color: #1e293b !important; }
+html.light .text-slate-400 { color: #475569 !important; }
+html.light .text-slate-500 { color: #64748b !important; }
+html.light .text-slate-600 { color: #94a3b8 !important; }
+html.light .text-white { color: #ffffff !important; }
+
+/* Light theme — borders */
+html.light .border-slate-800 { border-color: #e2e8f0 !important; }
+html.light .border-slate-800\/50 { border-color: rgba(226, 232, 240, 0.5) !important; }
+html.light .border-slate-800\/30 { border-color: rgba(226, 232, 240, 0.3) !important; }
+html.light .border-slate-700 { border-color: #cbd5e1 !important; }
+
+/* Light theme — hover */
+html.light .hover\:bg-slate-900:hover { background-color: #f1f5f9 !important; }
+html.light .hover\:bg-slate-900\/50:hover { background-color: rgba(241, 245, 249, 0.5) !important; }
+html.light .hover\:bg-slate-900\/30:hover { background-color: rgba(241, 245, 249, 0.3) !important; }
+html.light .hover\:bg-slate-800:hover { background-color: #e2e8f0 !important; }
+html.light .hover\:bg-slate-800\/50:hover { background-color: rgba(226, 232, 240, 0.5) !important; }
+html.light .hover\:text-slate-200:hover { color: #0f172a !important; }
+html.light .hover\:text-slate-300:hover { color: #1e293b !important; }
+
+/* Light theme — inputs */
+html.light input, html.light select, html.light textarea {
+  color: #0f172a !important;
+}
+html.light input::placeholder, html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Light theme — divide colors */
+html.light .divide-slate-800\/50 > * + * { border-color: rgba(226, 232, 240, 0.5) !important; }
+
+/* Light theme — console */
+html.light .console-output pre { color: #1e293b !important; }
+
+/* Light theme — window background */
+html.light { background-color: #ffffff; }

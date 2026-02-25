@@ -2,9 +2,9 @@ import { app, shell, BrowserWindow, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
-import { isConfigured } from './store'
+import { isConfigured, getSettings } from './store'
 import { initAutoUpdater } from './updater'
-import { initNotifier } from './notifier'
+import { initNotifier, onBuildStateChange } from './notifier'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -78,6 +78,43 @@ function createTrayIcon(): nativeImage {
   return image
 }
 
+/**
+ * Create a colored circle icon for the tray (16x16).
+ * Used for dynamic tray icon based on global build status.
+ */
+function createColoredTrayIcon(color: 'green' | 'red' | 'yellow' | 'blue' | 'gray'): nativeImage {
+  const colorMap: Record<string, string> = {
+    green: '#22c55e',
+    red: '#ef4444',
+    yellow: '#eab308',
+    blue: '#3b82f6',
+    gray: '#64748b'
+  }
+  const hex = colorMap[color] || colorMap.gray
+  // Create a simple 16x16 data URL with a colored circle
+  const size = 16
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="${hex}"/></svg>`
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+  const img = nativeImage.createFromDataURL(dataUrl)
+  return img
+}
+
+let lastTrayStatus: string = ''
+
+function updateTrayIcon(status: 'green' | 'red' | 'yellow' | 'blue' | 'gray'): void {
+  if (!tray || status === lastTrayStatus) return
+  lastTrayStatus = status
+  if (process.platform === 'darwin') {
+    // On macOS, use template images for dark/light menu bar
+    // Colored icons don't look great as template, so we set them non-template
+    const icon = createColoredTrayIcon(status)
+    icon.setTemplateImage(false)
+    tray.setImage(icon)
+  } else {
+    tray.setImage(createColoredTrayIcon(status))
+  }
+}
+
 function createTray(): void {
   const icon = createTrayIcon()
   tray = new Tray(icon)
@@ -95,7 +132,6 @@ function createTray(): void {
     {
       label: 'Open Jenkins',
       click: (): void => {
-        const { getSettings } = require('./store')
         const settings = getSettings()
         if (settings.jenkinsUrl) {
           shell.openExternal(settings.jenkinsUrl)
@@ -137,6 +173,12 @@ app.whenReady().then(() => {
   createTray()
   initAutoUpdater(mainWindow!)
   initNotifier(mainWindow!)
+
+  // Dynamic tray icon: listen for build state changes
+  onBuildStateChange((globalStatus) => {
+    updateTrayIcon(globalStatus)
+  })
+
   // If not configured, show settings immediately
   if (!isConfigured()) {
     mainWindow?.webContents.once('did-finish-load', () => {

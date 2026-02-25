@@ -104,6 +104,53 @@ export interface JenkinsQueueItem {
   }
 }
 
+export interface JenkinsTestCase {
+  name: string
+  className: string
+  status: string
+  duration: number
+  errorDetails?: string
+  errorStackTrace?: string
+}
+
+export interface JenkinsTestSuite {
+  name: string
+  duration: number
+  cases: JenkinsTestCase[]
+}
+
+export interface JenkinsTestReport {
+  failCount: number
+  passCount: number
+  skipCount: number
+  totalCount: number
+  duration: number
+  suites: JenkinsTestSuite[]
+}
+
+export interface JenkinsStageLog {
+  nodeId: string
+  nodeStatus: string
+  length: number
+  hasMore: boolean
+  text: string
+  consoleUrl: string
+}
+
+export interface JenkinsView {
+  name: string
+  url: string
+  jobs?: { name: string; url: string; fullName?: string; color?: string }[]
+}
+
+export interface JenkinsBuildParameterDef {
+  name: string
+  type: string
+  description?: string
+  defaultValue?: string
+  choices?: string[]
+}
+
 /**
  * Convert a Jenkins fullname (e.g., "MIND/mind-purchase-order-service/master")
  * to a URL path (e.g., "/job/MIND/job/mind-purchase-order-service/job/master")
@@ -263,12 +310,31 @@ export class JenkinsAPI {
   async getTestReport(
     fullname: string,
     number?: number
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<JenkinsTestReport | null> {
     try {
       const buildPath = number ? `/${number}` : '/lastBuild'
-      return await this.requestSimple<Record<string, unknown>>(
-        `${fullnameToPath(fullname)}${buildPath}/testReport/api/json`
+      const raw = await this.requestSimple<Record<string, unknown>>(
+        `${fullnameToPath(fullname)}${buildPath}/testReport/api/json?tree=failCount,passCount,skipCount,totalCount,duration,suites[name,duration,cases[name,className,status,duration,errorDetails,errorStackTrace]]`
       )
+      return {
+        failCount: (raw.failCount as number) ?? 0,
+        passCount: (raw.passCount as number) ?? 0,
+        skipCount: (raw.skipCount as number) ?? 0,
+        totalCount: ((raw.failCount as number) ?? 0) + ((raw.passCount as number) ?? 0) + ((raw.skipCount as number) ?? 0),
+        duration: (raw.duration as number) ?? 0,
+        suites: ((raw.suites as Array<Record<string, unknown>>) ?? []).map((s) => ({
+          name: (s.name as string) ?? '',
+          duration: (s.duration as number) ?? 0,
+          cases: ((s.cases as Array<Record<string, unknown>>) ?? []).map((c) => ({
+            name: (c.name as string) ?? '',
+            className: (c.className as string) ?? '',
+            status: (c.status as string) ?? 'UNKNOWN',
+            duration: (c.duration as number) ?? 0,
+            errorDetails: c.errorDetails as string | undefined,
+            errorStackTrace: c.errorStackTrace as string | undefined
+          }))
+        }))
+      }
     } catch {
       return null
     }
@@ -285,6 +351,14 @@ export class JenkinsAPI {
       // Not a pipeline job or wfapi not available
       return []
     }
+  }
+
+  async getStageLog(fullname: string, number: number, nodeId: string): Promise<JenkinsStageLog> {
+    const buildPath = `/${number}`
+    const data = await this.requestSimple<JenkinsStageLog>(
+      `${fullnameToPath(fullname)}${buildPath}/execution/node/${nodeId}/wfapi/log`
+    )
+    return data
   }
 
   async getRunningBuilds(): Promise<JenkinsRunningBuild[]> {
@@ -418,6 +492,53 @@ export class JenkinsAPI {
     await this.post(
       `${fullnameToPath(fullname)}/${number}/input/${encodeURIComponent(inputId)}/abort`
     )
+  }
+
+  // ─── Views ──────────────────────────────────────────────────
+
+  async getViews(): Promise<JenkinsView[]> {
+    try {
+      const data = await this.requestSimple<{ views: JenkinsView[] }>(
+        '/api/json?tree=views[name,url,jobs[name,url,fullName,color]]'
+      )
+      return (data.views || []).filter((v) => v.name !== 'all' && v.name !== 'All')
+    } catch {
+      return []
+    }
+  }
+
+  // ─── Build Parameters ────────────────────────────────────────
+
+  async getBuildParameters(fullname: string): Promise<JenkinsBuildParameterDef[]> {
+    try {
+      const data = await this.requestSimple<{
+        property?: Array<{
+          _class?: string
+          parameterDefinitions?: Array<{
+            name: string
+            type: string
+            description?: string
+            defaultParameterValue?: { value?: string }
+            choices?: string[]
+          }>
+        }>
+      }>(
+        `${fullnameToPath(fullname)}/api/json?tree=property[parameterDefinitions[name,type,description,defaultParameterValue[value],choices]]`
+      )
+
+      const paramProp = data.property?.find((p) => p.parameterDefinitions)
+      if (!paramProp?.parameterDefinitions) return []
+
+      return paramProp.parameterDefinitions.map((p) => ({
+        name: p.name,
+        type: p.type,
+        description: p.description,
+        defaultValue: p.defaultParameterValue?.value,
+        choices: p.choices
+      }))
+    } catch {
+      return []
+    }
   }
 
   // ─── Health Check ─────────────────────────────────────────────

@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Settings, Save, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Settings, Save, CheckCircle, XCircle, Loader2, Sun, Moon, Volume2, ServerCrash, Trash2, Plus } from 'lucide-react'
+import { useTheme } from '../hooks/useTheme'
 
 interface Props {
   onSaved: () => void
 }
 
 export default function SettingsPage({ onSaved }: Props) {
+  const { theme, toggle } = useTheme()
+  const [profiles, setProfiles] = useState<ServerProfile[]>([])
+  const [newProfileName, setNewProfileName] = useState('')
   const [settings, setSettings] = useState<AppSettings>({
     jenkinsUrl: '',
     jenkinsUsername: '',
     jenkinsToken: '',
     refreshInterval: 30,
-    showNotifications: true
+    showNotifications: true,
+    theme: 'dark',
+    soundAlerts: false
   })
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<boolean | null>(null)
@@ -22,6 +28,7 @@ export default function SettingsPage({ onSaved }: Props) {
   useEffect(() => {
     window.api.settings.get().then(setSettings)
     window.api.getVersion().then(setAppVersion)
+    window.api.profiles.get().then(setProfiles).catch(() => {})
   }, [])
 
   const handleChange = (key: keyof AppSettings, value: string | number | boolean) => {
@@ -133,8 +140,114 @@ export default function SettingsPage({ onSaved }: Props) {
               htmlFor="notifications"
               className="text-sm text-slate-300 cursor-pointer"
             >
-              Show desktop notifications for build failures
+              Show desktop notifications for build status changes
             </label>
+          </div>
+
+          {/* Sound Alerts */}
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="soundAlerts"
+              checked={settings.soundAlerts}
+              onChange={(e) => handleChange('soundAlerts', e.target.checked)}
+              className="w-4 h-4 accent-blue-500"
+            />
+            <label
+              htmlFor="soundAlerts"
+              className="text-sm text-slate-300 cursor-pointer flex items-center gap-1.5"
+            >
+              <Volume2 size={14} className="text-slate-500" />
+              Play sound on build failure
+            </label>
+          </div>
+
+          {/* Server Profiles (Multi-Jenkins) */}
+          <div className="pt-3 border-t border-slate-800">
+            <label className="block text-xs font-medium text-slate-400 mb-2">
+              Server Profiles
+            </label>
+            <div className="space-y-2 mb-2">
+              {profiles.map((p) => (
+                <div key={p.name} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded text-sm">
+                  <ServerCrash size={12} className="text-slate-500" />
+                  <span className="flex-1 text-slate-300 truncate">{p.name}</span>
+                  <span className="text-xs text-slate-600 truncate max-w-[120px]">{p.url}</span>
+                  <button
+                    onClick={async () => {
+                      const result = await window.api.profiles.load(p.name)
+                      if (result) {
+                        setSettings(result)
+                        onSaved()
+                      }
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition"
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const updated = await window.api.profiles.delete(p.name)
+                      setProfiles(updated)
+                    }}
+                    className="p-0.5 text-slate-600 hover:text-red-400 transition"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                placeholder="Profile name"
+                className="flex-1 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={async () => {
+                  if (!newProfileName.trim()) return
+                  const updated = await window.api.profiles.save({
+                    name: newProfileName.trim(),
+                    url: settings.jenkinsUrl,
+                    username: settings.jenkinsUsername,
+                    token: settings.jenkinsToken
+                  })
+                  setProfiles(updated)
+                  setNewProfileName('')
+                }}
+                disabled={!newProfileName.trim() || !settings.jenkinsUrl}
+                className="flex items-center gap-1 px-2 py-1 bg-slate-800 text-slate-300 text-xs rounded hover:bg-slate-700 transition disabled:opacity-40"
+              >
+                <Plus size={10} />
+                Save Current
+              </button>
+            </div>
+          </div>
+
+          {/* Theme Toggle */}
+          <div className="flex items-center gap-3 pt-2">
+            <label className="text-xs font-medium text-slate-400">Theme</label>
+            <button
+              onClick={() => {
+                toggle()
+                handleChange('theme', theme === 'dark' ? 'light' : 'dark')
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm text-slate-300 hover:bg-slate-700 transition"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Moon size={14} className="text-blue-400" />
+                  Dark
+                </>
+              ) : (
+                <>
+                  <Sun size={14} className="text-amber-400" />
+                  Light
+                </>
+              )}
+            </button>
           </div>
 
           {/* Actions */}
@@ -172,13 +285,37 @@ export default function SettingsPage({ onSaved }: Props) {
 
           {/* Test result message */}
           {testResult === true && (
-            <p className="text-sm text-emerald-400">✓ Connection successful</p>
+            <p className="text-sm text-emerald-400">Connection successful</p>
           )}
           {testResult === false && (
             <p className="text-sm text-red-400">
-              ✗ Connection failed. Check your URL and credentials.
+              Connection failed. Check your URL and credentials.
             </p>
           )}
+
+          {/* Keyboard shortcuts reference */}
+          <div className="mt-6 pt-4 border-t border-slate-800">
+            <h3 className="text-xs font-medium text-slate-400 mb-3">Keyboard Shortcuts</h3>
+            <div className="grid grid-cols-2 gap-y-1.5 text-xs">
+              {[
+                ['Cmd+K', 'Search jobs'],
+                ['Cmd+R', 'Refresh current view'],
+                ['Cmd+1', 'Dashboard'],
+                ['Cmd+2', 'Nodes'],
+                ['Cmd+3', 'Queue'],
+                ['Cmd+,', 'Settings'],
+                ['Cmd+F', 'Search in console'],
+                ['Escape', 'Go back']
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-400 font-mono">
+                    {key}
+                  </kbd>
+                  <span className="text-slate-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* App version */}

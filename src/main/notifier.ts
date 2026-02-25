@@ -5,7 +5,7 @@
  * or when a pipeline is waiting for input.
  */
 
-import { Notification, BrowserWindow } from 'electron'
+import { Notification, BrowserWindow, shell } from 'electron'
 import { JenkinsAPI, JenkinsItem, JenkinsPendingInput } from './jenkins-api'
 import { getSettings } from './store'
 
@@ -23,6 +23,14 @@ const notifiedInputs = new Set<string>()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let api: JenkinsAPI | null = null
 let mainWindow: BrowserWindow | null = null
+
+/** Callbacks for tray icon updates */
+type StatusCallback = (status: 'green' | 'red' | 'yellow' | 'blue' | 'gray') => void
+const stateChangeCallbacks: StatusCallback[] = []
+
+export function onBuildStateChange(callback: StatusCallback): void {
+  stateChangeCallbacks.push(callback)
+}
 
 function getApi(): JenkinsAPI | null {
   if (!api) {
@@ -49,6 +57,13 @@ function showNotification(title: string, body: string): void {
   notification.show()
 }
 
+/** Play a system sound for failure alerts (cross-platform) */
+function playFailureSound(): void {
+  if (!getSettings().soundAlerts) return
+  // Use shell.beep which works on all platforms
+  shell.beep()
+}
+
 function buildResultLabel(color: string): string | null {
   const base = color?.replace('_anime', '') || ''
   if (color?.endsWith('_anime')) return null // still running, no notification
@@ -72,12 +87,41 @@ function shortName(fullname: string): string {
   return parts.length > 1 ? parts.slice(-2).join('/') : fullname
 }
 
+/** Compute the global status from all known items for dynamic tray icon */
+function computeGlobalStatus(items: JenkinsItem[]): 'green' | 'red' | 'yellow' | 'blue' | 'gray' {
+  let hasRunning = false
+  let hasFailed = false
+  let hasUnstable = false
+  let hasSuccess = false
+
+  for (const item of items) {
+    const color = item.color || 'notbuilt'
+    const base = color.replace('_anime', '')
+    if (color.endsWith('_anime')) hasRunning = true
+    if (base === 'red') hasFailed = true
+    else if (base === 'yellow') hasUnstable = true
+    else if (base === 'blue' || base === 'green') hasSuccess = true
+  }
+
+  if (hasFailed) return 'red'
+  if (hasRunning) return 'blue'
+  if (hasUnstable) return 'yellow'
+  if (hasSuccess) return 'green'
+  return 'gray'
+}
+
 async function checkForChanges(): Promise<void> {
   const client = getApi()
   if (!client) return
 
   try {
     const items = await client.getAllItems()
+
+    // Update tray icon based on global status
+    const globalStatus = computeGlobalStatus(items)
+    for (const cb of stateChangeCallbacks) {
+      try { cb(globalStatus) } catch { /* ignore */ }
+    }
 
     for (const item of items) {
       const key = item.fullname
@@ -111,6 +155,10 @@ async function checkForChanges(): Promise<void> {
             `${emoji} Build ${resultLabel}`,
             `${shortName(key)} #${currentBuildNum}`
           )
+          // Play sound for failures
+          if (resultLabel === 'FAILED' || resultLabel === 'UNSTABLE') {
+            playFailureSound()
+          }
         }
       }
 

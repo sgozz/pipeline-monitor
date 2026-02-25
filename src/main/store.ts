@@ -6,11 +6,21 @@ export interface AppSettings {
   jenkinsToken: string
   refreshInterval: number // seconds
   showNotifications: boolean
+  theme: 'dark' | 'light'
+  soundAlerts: boolean
+}
+
+export interface ServerProfile {
+  name: string
+  url: string
+  username: string
+  token: string
 }
 
 interface StoreSchema extends AppSettings {
   favorites: string[] // list of fullnames marked as favorite
   pinnedFolders: string[] // list of folder names pinned to top
+  serverProfiles: ServerProfile[] // saved connection profiles
 }
 
 const defaults: StoreSchema = {
@@ -19,8 +29,11 @@ const defaults: StoreSchema = {
   jenkinsToken: '',
   refreshInterval: 30,
   showNotifications: true,
+  theme: 'dark',
+  soundAlerts: false,
   favorites: [],
-  pinnedFolders: []
+  pinnedFolders: [],
+  serverProfiles: []
 }
 
 const store = new Store<StoreSchema>({
@@ -34,7 +47,9 @@ export function getSettings(): AppSettings {
     jenkinsUsername: store.get('jenkinsUsername'),
     jenkinsToken: store.get('jenkinsToken'),
     refreshInterval: store.get('refreshInterval'),
-    showNotifications: store.get('showNotifications')
+    showNotifications: store.get('showNotifications'),
+    theme: store.get('theme') ?? 'dark',
+    soundAlerts: store.get('soundAlerts') ?? false
   }
 }
 
@@ -81,4 +96,39 @@ export function getPinnedFolders(): string[] {
 export function setPinnedFolders(folders: string[]): string[] {
   store.set('pinnedFolders', folders)
   return folders
+}
+
+// ─── Server Profiles (Multi-Jenkins) ─────────────────────────
+
+export function getServerProfiles(): ServerProfile[] {
+  return store.get('serverProfiles') || []
+}
+
+export function saveServerProfile(profile: ServerProfile): ServerProfile[] {
+  const profiles = getServerProfiles()
+  const idx = profiles.findIndex((p) => p.name === profile.name)
+  if (idx >= 0) {
+    profiles[idx] = profile
+  } else {
+    profiles.push(profile)
+  }
+  store.set('serverProfiles', profiles)
+  return profiles
+}
+
+export function deleteServerProfile(name: string): ServerProfile[] {
+  const profiles = getServerProfiles().filter((p) => p.name !== name)
+  store.set('serverProfiles', profiles)
+  return profiles
+}
+
+export function loadServerProfile(name: string): AppSettings | null {
+  const profile = getServerProfiles().find((p) => p.name === name)
+  if (!profile) return null
+  setSettings({
+    jenkinsUrl: profile.url,
+    jenkinsUsername: profile.username,
+    jenkinsToken: profile.token
+  })
+  return getSettings()
 }

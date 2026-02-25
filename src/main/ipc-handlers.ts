@@ -1,6 +1,6 @@
 import { app, ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
-import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite, getPinnedFolders, setPinnedFolders } from './store'
+import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite, getPinnedFolders, setPinnedFolders, getServerProfiles, saveServerProfile, deleteServerProfile, loadServerProfile, ServerProfile } from './store'
 import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
 import { apiCache, CacheTTL } from './cache'
 import { refreshNotifierApi } from './notifier'
@@ -170,6 +170,14 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    'jenkins:get-stage-log',
+    async (_, fullname: string, number: number, nodeId: string) => {
+      ensureConfigured()
+      return await getApi().getStageLog(fullname, number, nodeId)
+    }
+  )
+
   ipcMain.handle('jenkins:get-running-builds', async () => {
     ensureConfigured()
     // Running builds derive from nodes — use nodes cache internally
@@ -253,6 +261,17 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // ─── Views ─────────────────────────────────────────────
+  ipcMain.handle('jenkins:get-views', async () => {
+    ensureConfigured()
+    return cachedFetch('views:all', CacheTTL.ITEMS, () => getApi().getViews())
+  })
+
+  // ─── Build Parameters ──────────────────────────────────
+  ipcMain.handle('jenkins:get-build-parameters', async (_, fullname: string) => {
+    ensureConfigured()
+    return cachedFetch(`params:${fullname}`, CacheTTL.ITEMS, () => getApi().getBuildParameters(fullname))
+  })
 
   // ─── Favorites ────────────────────────────────────────────
   ipcMain.handle('favorites:get', () => getFavorites())
@@ -262,6 +281,19 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:get-pinned-folders', () => getPinnedFolders())
 
   ipcMain.handle('settings:set-pinned-folders', (_, folders: string[]) => setPinnedFolders(folders))
+
+  // ─── Server Profiles (Multi-Jenkins) ─────────────────────
+  ipcMain.handle('profiles:get', () => getServerProfiles())
+
+  ipcMain.handle('profiles:save', (_, profile: ServerProfile) => saveServerProfile(profile))
+
+  ipcMain.handle('profiles:delete', (_, name: string) => deleteServerProfile(name))
+
+  ipcMain.handle('profiles:load', (_, name: string) => {
+    const result = loadServerProfile(name)
+    if (result) refreshApi()
+    return result
+  })
 
   // ─── Updater ─────────────────────────────────────────────
   ipcMain.handle('updater:get-status', () => getUpdateStatus())
