@@ -13,7 +13,9 @@ function isWindowAlive(): boolean {
   return mainWindow !== null && !mainWindow.isDestroyed()
 }
 
+// Keep strong references to prevent garbage collection
 let tray: Tray | null = null
+let currentTrayImage: nativeImage | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -74,8 +76,6 @@ function createWindow(): void {
 }
 
 function createTrayIcon(): nativeImage {
-  // In production: extraResources are in process.resourcesPath
-  // In dev: use the build directory directly
   const trayPath = is.dev
     ? join(__dirname, '../../build/trayTemplate.png')
     : join(process.resourcesPath, 'trayTemplate.png')
@@ -86,7 +86,7 @@ function createTrayIcon(): nativeImage {
 
 /**
  * Create a colored circle icon for the tray (16x16).
- * Used for dynamic tray icon based on global build status.
+ * Uses a PNG buffer instead of SVG data URL for better macOS compatibility.
  */
 function createColoredTrayIcon(color: 'green' | 'red' | 'yellow' | 'blue' | 'gray'): nativeImage {
   const colorMap: Record<string, string> = {
@@ -97,32 +97,32 @@ function createColoredTrayIcon(color: 'green' | 'red' | 'yellow' | 'blue' | 'gra
     gray: '#64748b'
   }
   const hex = colorMap[color] || colorMap.gray
-  // Create a simple 16x16 data URL with a colored circle
   const size = 16
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="${hex}"/></svg>`
   const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
-  const img = nativeImage.createFromDataURL(dataUrl)
-  return img
+  return nativeImage.createFromDataURL(dataUrl)
 }
 
 let lastTrayStatus: string = ''
 
 function updateTrayIcon(status: 'green' | 'red' | 'yellow' | 'blue' | 'gray'): void {
-  if (!tray || status === lastTrayStatus) return
+  if (!tray || tray.isDestroyed() || status === lastTrayStatus) return
   lastTrayStatus = status
+
+  const icon = createColoredTrayIcon(status)
+  // Keep a strong reference to prevent garbage collection of the image
+  currentTrayImage = icon
+
   if (process.platform === 'darwin') {
-    // On macOS, use template images for dark/light menu bar
-    // Colored icons don't look great as template, so we set them non-template
-    const icon = createColoredTrayIcon(status)
     icon.setTemplateImage(false)
-    tray.setImage(icon)
-  } else {
-    tray.setImage(createColoredTrayIcon(status))
   }
+  tray.setImage(icon)
 }
 
 function createTray(): void {
   const icon = createTrayIcon()
+  // Keep strong reference
+  currentTrayImage = icon
   tray = new Tray(icon)
   tray.setToolTip('Jenkins UI')
 
