@@ -80,7 +80,7 @@ export default function App() {
       {/* Sidebar */}
       <nav className="w-52 bg-slate-900 border-r border-slate-800 flex flex-col">
         {/* Titlebar drag area */}
-        <div className="titlebar-drag h-10 flex items-center px-4 border-b border-slate-800">
+        <div className="titlebar-drag h-10 flex items-center pl-20 pr-4 border-b border-slate-800">
           <span className="titlebar-no-drag text-xs font-semibold text-slate-400 uppercase tracking-wider">
             Jenkins UI
           </span>
