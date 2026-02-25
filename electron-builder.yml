@@ -16,8 +16,6 @@ extraResources:
     to: trayTemplate@2x.png
 mac:
   icon: build/icon.icns
-  extendInfo:
-    LSUIElement: true
   target:
     - dmg
     - zip
