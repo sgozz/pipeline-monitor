@@ -162,6 +162,7 @@ export default function Dashboard({ onOpenJob }: Props) {
                       key={`fav-${item.fullname}`}
                       item={item}
                       isFavorite={true}
+                      showFullPath
                       onOpenJob={onOpenJob}
                       onToggleFavorite={toggleFavorite}
                       onTriggerBuild={handleTriggerBuild}
@@ -301,6 +302,7 @@ export default function Dashboard({ onOpenJob }: Props) {
 function BranchRow({
   item,
   isFavorite,
+  showFullPath,
   onOpenJob,
   onToggleFavorite,
   onTriggerBuild,
@@ -309,6 +311,7 @@ function BranchRow({
 }: {
   item: JenkinsItem
   isFavorite: boolean
+  showFullPath?: boolean
   onOpenJob: (fullname: string) => void
   onToggleFavorite: (e: React.MouseEvent, fullname: string) => void
   onTriggerBuild: (e: React.MouseEvent, fullname: string) => void
@@ -316,7 +319,9 @@ function BranchRow({
   indent: number
 }) {
   const status = colorToStatus(item.color)
-  const branchName = item.fullname.split('/').pop() || item.name
+  const parts = item.fullname.split('/')
+  const branchName = parts.pop() || item.name
+  const parentPath = parts.join('/')
   const paddingLeft = indent === 2 ? 'pl-14' : 'pl-10'
 
   return (
@@ -327,20 +332,23 @@ function BranchRow({
       <span
         className={`w-2 h-2 rounded-full flex-shrink-0 ${status.dotClass}`}
       />
-      <span className="text-sm text-slate-200 truncate flex-1 text-left">
-        {branchName}
-      </span>
-      <span className={`text-xs ${status.class}`}>
+      <div className="flex-1 min-w-0 text-left truncate">
+        {showFullPath && parentPath && (
+          <span className="text-slate-500 text-sm">{parentPath}<span className="mx-1 text-slate-600">/</span></span>
+        )}
+        <span className="text-sm text-slate-200">{branchName}</span>
+      </div>
+      <span className={`text-xs ${status.class} shrink-0`}>
         {status.label}
       </span>
       {item.lastBuild && (
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-500 shrink-0">
           #{item.lastBuild.number}
         </span>
       )}
       <button
         onClick={(e) => onToggleFavorite(e, item.fullname)}
-        className={`p-1 rounded transition ${
+        className={`p-1 rounded transition shrink-0 ${
           isFavorite
             ? 'text-amber-400 hover:text-amber-300'
             : 'opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400'
@@ -352,7 +360,7 @@ function BranchRow({
       <button
         onClick={(e) => onTriggerBuild(e, item.fullname)}
         disabled={triggeringJob === item.fullname}
-        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition"
+        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition shrink-0"
         title="Trigger build"
       >
         <Play
