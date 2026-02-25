@@ -51,8 +51,10 @@ function showNotification(title: string, body: string): void {
   if (!getSettings().showNotifications) return
   const notification = new Notification({ title, body })
   notification.on('click', () => {
-    mainWindow?.show()
-    mainWindow?.focus()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
   })
   notification.show()
 }
@@ -192,11 +194,13 @@ async function checkPendingInputs(items: JenkinsItem[]): Promise<void> {
             `${shortName(item.fullname)} #${item.lastBuild.number}: ${input.message}`
           )
           // Notify renderer about pending input
-          mainWindow?.webContents.send('jenkins:pending-input', {
-            fullname: item.fullname,
-            buildNumber: item.lastBuild.number,
-            input
-          })
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('jenkins:pending-input', {
+              fullname: item.fullname,
+              buildNumber: item.lastBuild.number,
+              input
+            })
+          }
         }
       }
     } catch {

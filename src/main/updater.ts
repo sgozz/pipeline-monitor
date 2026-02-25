@@ -14,7 +14,13 @@ let mainWindow: BrowserWindow | null = null
 
 function sendStatus(status: UpdateStatus): void {
   currentStatus = status
-  mainWindow?.webContents.send('updater:status', status)
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', status)
+    }
+  } catch {
+    // Window may have been destroyed during quit — ignore
+  }
 }
 
 export function getUpdateStatus(): UpdateStatus {
@@ -82,6 +88,8 @@ export function checkForUpdates(): void {
 export function installUpdate(): void {
   // Set isQuitting so the close handler doesn't intercept and hide to tray
   app.isQuitting = true
+  // Clear window reference before closing to prevent 'destroyed' errors
+  mainWindow = null
   // Force-close all windows so nothing blocks the quit
   for (const win of BrowserWindow.getAllWindows()) {
     win.removeAllListeners('close')
