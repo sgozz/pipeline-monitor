@@ -101,6 +101,14 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    'jenkins:get-stages',
+    async (_, fullname: string, number?: number) => {
+      ensureConfigured()
+      return await getApi().getStages(fullname, number)
+    }
+  )
+
   ipcMain.handle('jenkins:get-running-builds', async () => {
     ensureConfigured()
     return await getApi().getRunningBuilds()

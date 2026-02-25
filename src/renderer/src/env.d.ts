@@ -25,6 +25,15 @@ interface JenkinsBuild {
   nextBuild?: { number: number; url: string }
 }
 
+interface JenkinsStage {
+  id: string
+  name: string
+  status: string
+  startTimeMillis: number
+  durationMillis: number
+  pauseDurationMillis: number
+}
+
 interface JenkinsRunningBuild {
   number: number
   url: string
@@ -92,6 +101,7 @@ declare global {
         getNode: (name: string) => Promise<JenkinsNode>
         getQueueItems: () => Promise<JenkinsQueueItem[]>
         cancelQueueItem: (id: number) => Promise<void>
+        getStages: (fullname: string, number?: number) => Promise<JenkinsStage[]>
       }
       settings: {
         get: () => Promise<AppSettings>

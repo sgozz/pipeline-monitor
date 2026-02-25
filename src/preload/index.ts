@@ -18,6 +18,8 @@ const api = {
       ipcRenderer.invoke('jenkins:get-console-output', fullname, number),
     getTestReport: (fullname: string, number?: number) =>
       ipcRenderer.invoke('jenkins:get-test-report', fullname, number),
+    getStages: (fullname: string, number?: number) =>
+      ipcRenderer.invoke('jenkins:get-stages', fullname, number),
     getRunningBuilds: () => ipcRenderer.invoke('jenkins:get-running-builds'),
     buildItem: (fullname: string, params?: Record<string, string>) =>
       ipcRenderer.invoke('jenkins:build-item', fullname, params),

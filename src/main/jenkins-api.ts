@@ -34,6 +34,24 @@ export interface JenkinsBuild {
   nextBuild?: { number: number; url: string }
 }
 
+export interface JenkinsStage {
+  id: string
+  name: string
+  status: string
+  startTimeMillis: number
+  durationMillis: number
+  pauseDurationMillis: number
+  stageFlowNodes?: { id: string; name: string; status: string }[]
+}
+
+export interface JenkinsPipelineRun {
+  id: string
+  name: string
+  status: string
+  durationMillis: number
+  stages: JenkinsStage[]
+}
+
 export interface JenkinsRunningBuild {
   number: number
   url: string
@@ -208,6 +226,19 @@ export class JenkinsAPI {
       )
     } catch {
       return null
+    }
+  }
+
+  async getStages(fullname: string, number?: number): Promise<JenkinsStage[]> {
+    try {
+      const buildPath = number ? `/${number}` : '/lastBuild'
+      const data = await this.request<JenkinsPipelineRun>(
+        `${fullnameToPath(fullname)}${buildPath}/wfapi/describe`
+      )
+      return data.stages || []
+    } catch {
+      // Not a pipeline job or wfapi not available
+      return []
     }
   }
 
