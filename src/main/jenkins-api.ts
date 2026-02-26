@@ -32,6 +32,7 @@ export interface JenkinsBuild {
   result?: string
   previousBuild?: { number: number; url: string }
   nextBuild?: { number: number; url: string }
+  changeSets?: { items: { commitId: string; msg: string; author: { fullName: string }; timestamp: number }[] }[]
 }
 
 export interface JenkinsStage {
@@ -291,9 +292,15 @@ export class JenkinsAPI {
 
   async getBuild(fullname: string, number?: number): Promise<JenkinsBuild> {
     const buildPath = number ? `/${number}` : '/lastBuild'
-    return this.requestSimple<JenkinsBuild>(
-      `${fullnameToPath(fullname)}${buildPath}/api/json?tree=number,url,timestamp,duration,estimatedDuration,building,result,previousBuild[number,url],nextBuild[number,url],changeSets[items[commitId,msg,author[fullName],timestamp]]`
+    const build = await this.requestSimple<JenkinsBuild & { changeSet?: { items: { commitId: string; msg: string; author: { fullName: string }; timestamp: number }[] } }>(
+      `${fullnameToPath(fullname)}${buildPath}/api/json?tree=number,url,timestamp,duration,estimatedDuration,building,result,previousBuild[number,url],nextBuild[number,url],changeSets[items[commitId,msg,author[fullName],timestamp]],changeSet[items[commitId,msg,author[fullName],timestamp]]`
     )
+    // Normalize: freestyle jobs use singular changeSet, pipelines use changeSets
+    if (!build.changeSets?.length && build.changeSet?.items?.length) {
+      build.changeSets = [build.changeSet]
+    }
+    delete (build as Record<string, unknown>).changeSet
+    return build
   }
   async getBuildHistory(fullname: string, limit = 20): Promise<JenkinsBuild[]> {
     const data = await this.requestSimple<{ builds: JenkinsBuild[] }>(
