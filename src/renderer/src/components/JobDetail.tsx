@@ -84,6 +84,9 @@ export default function JobDetail({ fullname, onBack }: Props) {
   const [triggeringBuild, setTriggeringBuild] = useState(false)
   const [expandedBuild, setExpandedBuild] = useState<number | null>(null)
   const [comparePick, setComparePick] = useState<number | null>(null)
+  const [topLevelInputs, setTopLevelInputs] = useState<JenkinsPendingInput[]>([])
+  const [topLevelInputBuild, setTopLevelInputBuild] = useState<number | null>(null)
+  const [topLevelActiveInput, setTopLevelActiveInput] = useState<JenkinsPendingInput | null>(null)
 
   const { folder, name } = parseFullname(fullname)
 
@@ -119,6 +122,39 @@ export default function JobDetail({ fullname, onBack }: Props) {
       result: b.result
     }))
   }, [builds])
+
+  // Auto-detect pending inputs on running builds and show top-level banner
+  useEffect(() => {
+    if (!builds) return
+    const runningBuild = builds.find((b) => b.building)
+    if (!runningBuild) {
+      setTopLevelInputs([])
+      setTopLevelInputBuild(null)
+      return
+    }
+    let cancelled = false
+    const check = async () => {
+      try {
+        const inputs = await window.api.jenkins.getPendingInputs(fullname, runningBuild.number)
+        if (!cancelled) {
+          setTopLevelInputs(inputs)
+          setTopLevelInputBuild(inputs.length > 0 ? runningBuild.number : null)
+        }
+      } catch {
+        if (!cancelled) setTopLevelInputs([])
+      }
+    }
+    check()
+    const timer = setInterval(check, 10_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [builds, fullname])
+
+  const handleTopLevelInputDone = useCallback(() => {
+    setTopLevelActiveInput(null)
+    setTopLevelInputs([])
+    setTopLevelInputBuild(null)
+    setTimeout(refresh, 2000)
+  }, [refresh])
 
   // Render sub-views
   if (subView?.type === 'console') {
@@ -224,6 +260,43 @@ export default function JobDetail({ fullname, onBack }: Props) {
         </div>
       )}
 
+      {/* Pending input banner — shown prominently at the top */}
+      {topLevelInputs.length > 0 && topLevelInputBuild && (
+        <div className="px-4 py-2 border-b border-amber-500/30 bg-amber-500/10">
+          {topLevelInputs.map((input) => (
+            <div
+              key={input.id}
+              className="flex items-center gap-3 py-1.5"
+            >
+              <MessageSquare size={14} className="text-amber-400 shrink-0 animate-pulse" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-amber-200 truncate">{input.message}</p>
+                <p className="text-[11px] text-amber-400/60">
+                  Build #{topLevelInputBuild} is waiting for input
+                </p>
+              </div>
+              <button
+                onClick={() => setTopLevelActiveInput(input)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-amber-500 text-slate-900 rounded hover:bg-amber-400 transition shrink-0"
+              >
+                <MessageSquare size={14} />
+                Respond
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Top-level input dialog */}
+      {topLevelActiveInput && topLevelInputBuild && (
+        <InputDialog
+          fullname={fullname}
+          buildNumber={topLevelInputBuild}
+          input={topLevelActiveInput}
+          onDone={handleTopLevelInputDone}
+          onCancel={() => setTopLevelActiveInput(null)}
+        />
+      )}
       {/* Build history */}
       <div className="flex-1 overflow-auto">
         {loading && !builds ? (
