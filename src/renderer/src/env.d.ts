@@ -178,6 +178,7 @@ declare global {
     api: {
       jenkins: {
         getAllItems: () => Promise<JenkinsItem[]>
+        getItemsForFavorites: () => Promise<JenkinsItem[]>
         getItem: (fullname: string) => Promise<JenkinsItem>
         queryItems: (pattern: string) => Promise<JenkinsItem[]>
         getBuild: (fullname: string, number?: number) => Promise<JenkinsBuild>

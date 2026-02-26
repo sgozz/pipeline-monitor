@@ -8,6 +8,7 @@ export type UpdaterAPI = typeof api.updater
 const api = {
   jenkins: {
     getAllItems: () => ipcRenderer.invoke('jenkins:get-all-items'),
+    getItemsForFavorites: () => ipcRenderer.invoke('jenkins:get-items-for-favorites'),
     getItem: (fullname: string) => ipcRenderer.invoke('jenkins:get-item', fullname),
     queryItems: (pattern: string) => ipcRenderer.invoke('jenkins:query-items', pattern),
     getBuild: (fullname: string, number?: number) =>

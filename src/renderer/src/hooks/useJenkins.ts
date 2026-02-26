@@ -96,6 +96,13 @@ export function useJenkinsItems(intervalMs = 30000) {
 }
 
 /**
+ * Favorites + pinned folder items only — lightweight poll for Dashboard default view.
+ */
+export function useFavoriteItems(intervalMs = 30000) {
+  return usePolling(() => window.api.jenkins.getItemsForFavorites(), intervalMs, intervalMs > 0)
+}
+
+/**
  * Running builds — polls every 10s, pauses when hidden.
  */
 export function useRunningBuilds(intervalMs = 10000) {

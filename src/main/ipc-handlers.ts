@@ -105,6 +105,19 @@ export function registerIpcHandlers(): void {
     return cachedFetch('items:all', CacheTTL.ITEMS, () => getApi().getAllItems())
   })
 
+  ipcMain.handle('jenkins:get-items-for-favorites', async () => {
+    ensureConfigured()
+    const allItems = await cachedFetch('items:all', CacheTTL.ITEMS, () => getApi().getAllItems())
+    const favSet = new Set(getFavorites())
+    const pinnedSet = new Set(getPinnedFolders())
+    return allItems.filter((item) => {
+      if (favSet.has(item.fullname)) return true
+      const topFolder = item.fullname.split('/')[0]
+      if (pinnedSet.has(topFolder)) return true
+      return false
+    })
+  })
+
   ipcMain.handle('jenkins:get-item', async (_, fullname: string) => {
     ensureConfigured()
     return await getApi().getItem(fullname)
