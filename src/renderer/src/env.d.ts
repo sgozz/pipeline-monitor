@@ -23,6 +23,18 @@ interface JenkinsBuild {
   result?: string
   previousBuild?: { number: number; url: string }
   nextBuild?: { number: number; url: string }
+  changeSets?: JenkinsChangeSet[]
+}
+
+interface JenkinsChangeSet {
+  items: JenkinsCommit[]
+}
+
+interface JenkinsCommit {
+  commitId: string
+  msg: string
+  author: { fullName: string }
+  timestamp: number
 }
 
 interface JenkinsStage {

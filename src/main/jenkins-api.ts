@@ -292,7 +292,7 @@ export class JenkinsAPI {
   async getBuild(fullname: string, number?: number): Promise<JenkinsBuild> {
     const buildPath = number ? `/${number}` : '/lastBuild'
     return this.requestSimple<JenkinsBuild>(
-      `${fullnameToPath(fullname)}${buildPath}/api/json?tree=number,url,timestamp,duration,estimatedDuration,building,result,previousBuild[number,url],nextBuild[number,url]`
+      `${fullnameToPath(fullname)}${buildPath}/api/json?tree=number,url,timestamp,duration,estimatedDuration,building,result,previousBuild[number,url],nextBuild[number,url],changeSets[items[commitId,msg,author[fullName],timestamp]]`
     )
   }
   async getBuildHistory(fullname: string, limit = 20): Promise<JenkinsBuild[]> {

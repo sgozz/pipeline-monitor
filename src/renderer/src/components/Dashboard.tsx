@@ -16,6 +16,7 @@ import { useJenkinsItems } from '../hooks/useJenkins'
 import { colorToStatus, groupHierarchically, sortFolderGroups, sortJobsByStatus } from '../lib/utils'
 import BuildParamsDialog from './BuildParamsDialog'
 import FailedTestsInline from './FailedTestsInline'
+import BuildCommitsInline from './BuildCommitsInline'
 
 type StatusFilter = 'all' | 'failed' | 'running' | 'unstable' | 'success'
 
@@ -336,6 +337,12 @@ export default function Dashboard({ onOpenJob, searchInputRef }: Props) {
                           triggeringJob={triggeringJob}
                           indent={1}
                         />
+                        {item.lastBuild && (
+                          <BuildCommitsInline
+                            fullname={item.fullname}
+                            buildNumber={item.lastBuild.number}
+                          />
+                        )}
                         {hasFailed && item.lastBuild && (
                           <FailedTestsInline
                             fullname={item.fullname}
