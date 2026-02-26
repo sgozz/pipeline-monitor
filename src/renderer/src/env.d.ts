@@ -167,9 +167,9 @@ interface AppSettings {
 }
 
 interface UpdateStatus {
-  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'error'
   version?: string
-  progress?: number
+  downloadUrl?: string
   error?: string
 }
 
@@ -215,7 +215,7 @@ declare global {
       updater: {
         getStatus: () => Promise<UpdateStatus>
         check: () => Promise<void>
-        install: () => Promise<void>
+        openDownload: () => Promise<void>
         onStatus: (callback: (status: UpdateStatus) => void) => void
       }
       profiles: {

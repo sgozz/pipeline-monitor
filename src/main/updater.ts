@@ -1,11 +1,11 @@
 import { autoUpdater, UpdateInfo } from 'electron-updater'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
 export interface UpdateStatus {
-  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'ready' | 'error'
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'error'
   version?: string
-  progress?: number
+  downloadUrl?: string
   error?: string
 }
 
@@ -35,9 +35,9 @@ export function initAutoUpdater(window: BrowserWindow): void {
     return
   }
 
-  // Configuration
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+  // Disable auto-download — we just notify the user
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
 
   // Events
   autoUpdater.on('checking-for-update', () => {
@@ -45,22 +45,12 @@ export function initAutoUpdater(window: BrowserWindow): void {
   })
 
   autoUpdater.on('update-available', (info: UpdateInfo) => {
-    sendStatus({ status: 'available', version: info.version })
+    const downloadUrl = `https://github.com/sgozz/pipeline-monitor/releases/tag/v${info.version}`
+    sendStatus({ status: 'available', version: info.version, downloadUrl })
   })
 
   autoUpdater.on('update-not-available', () => {
     sendStatus({ status: 'not-available' })
-  })
-
-  autoUpdater.on('download-progress', (progress) => {
-    sendStatus({
-      status: 'downloading',
-      progress: Math.round(progress.percent)
-    })
-  })
-
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-    sendStatus({ status: 'ready', version: info.version })
   })
 
   autoUpdater.on('error', (err) => {
@@ -85,11 +75,10 @@ export function checkForUpdates(): void {
   autoUpdater.checkForUpdates().catch(() => {})
 }
 
-export function installUpdate(): void {
-  // Set isQuitting so the close handler lets windows close instead of hiding to tray
-  app.isQuitting = true
-  // Clear window reference to prevent 'destroyed' errors in sendStatus
-  mainWindow = null
-  // quitAndInstall: isSilent=false (show progress), isForceRunAfter=true (relaunch app after install)
-  autoUpdater.quitAndInstall(false, true)
+export function openDownloadPage(): void {
+  if (currentStatus.downloadUrl) {
+    shell.openExternal(currentStatus.downloadUrl)
+  } else {
+    shell.openExternal('https://github.com/sgozz/pipeline-monitor/releases/latest')
+  }
 }

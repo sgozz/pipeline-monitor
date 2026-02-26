@@ -65,7 +65,7 @@ const api = {
   updater: {
     getStatus: () => ipcRenderer.invoke('updater:get-status'),
     check: () => ipcRenderer.invoke('updater:check'),
-    install: () => ipcRenderer.invoke('updater:install'),
+    openDownload: () => ipcRenderer.invoke('updater:open-download'),
     onStatus: (callback: (status: unknown) => void) => {
       ipcRenderer.on('updater:status', (_, status) => callback(status))
     }

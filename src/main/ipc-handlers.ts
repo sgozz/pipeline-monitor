@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import { JenkinsAPI, JenkinsConfig } from './jenkins-api'
 import { getSettings, setSettings, isConfigured, getFavorites, toggleFavorite, getPinnedFolders, setPinnedFolders, getServerProfiles, saveServerProfile, deleteServerProfile, loadServerProfile, ServerProfile } from './store'
-import { getUpdateStatus, checkForUpdates, installUpdate } from './updater'
+import { getUpdateStatus, checkForUpdates, openDownloadPage } from './updater'
 import { apiCache, CacheTTL } from './cache'
 import { refreshNotifierApi } from './notifier'
 
@@ -315,8 +315,8 @@ export function registerIpcHandlers(): void {
     checkForUpdates()
   })
 
-  ipcMain.handle('updater:install', () => {
-    installUpdate()
+  ipcMain.handle('updater:open-download', () => {
+    openDownloadPage()
   })
 
   // ─── App Info ─────────────────────────────────────────────

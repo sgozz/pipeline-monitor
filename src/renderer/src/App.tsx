@@ -6,7 +6,6 @@ import {
   Settings as SettingsIcon,
   Activity,
   Download,
-  RefreshCw,
   X,
   MessageSquare,
   Keyboard
@@ -69,8 +68,7 @@ export default function App() {
     window.api.updater.onStatus((status) => {
       const s = status as UpdateStatus
       setUpdateStatus(s)
-      // Only un-dismiss for actionable statuses (new download or ready to install)
-      if (s.status === 'downloading' || s.status === 'ready') {
+      if (s.status === 'available') {
         setUpdateDismissed(false)
       }
     })
@@ -192,17 +190,17 @@ export default function App() {
         {/* Main content */}
         <main className="flex-1 flex flex-col overflow-hidden bg-slate-950">
           {/* Update banner */}
-          {!updateDismissed && updateStatus.status === 'ready' && (
+          {!updateDismissed && updateStatus.status === 'available' && (
             <div className="flex items-center gap-3 px-4 py-2 bg-emerald-900/50 border-b border-emerald-700/50 text-sm">
               <Download size={14} className="text-emerald-400" />
               <span className="text-emerald-200 flex-1">
-                Version {updateStatus.version} is ready to install
+                Version {updateStatus.version} is available
               </span>
               <button
-                onClick={() => window.api.updater.install()}
+                onClick={() => window.api.updater.openDownload()}
                 className="px-3 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-500 transition"
               >
-                Restart & Update
+                Download
               </button>
               <button
                 onClick={() => setUpdateDismissed(true)}
@@ -210,20 +208,6 @@ export default function App() {
               >
                 <X size={14} />
               </button>
-            </div>
-          )}
-          {!updateDismissed && updateStatus.status === 'downloading' && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-blue-900/30 border-b border-blue-700/30 text-sm">
-              <RefreshCw size={14} className="text-blue-400 animate-spin" />
-              <span className="text-blue-200 flex-1">
-                Downloading update... {updateStatus.progress ?? 0}%
-              </span>
-              <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full transition-all"
-                  style={{ width: `${updateStatus.progress ?? 0}%` }}
-                />
-              </div>
             </div>
           )}
 
