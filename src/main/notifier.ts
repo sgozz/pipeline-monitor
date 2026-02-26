@@ -7,7 +7,7 @@
 
 import { Notification, BrowserWindow, shell } from 'electron'
 import { JenkinsAPI, JenkinsItem, JenkinsPendingInput } from './jenkins-api'
-import { getSettings } from './store'
+import { getSettings, getFavorites } from './store'
 
 interface BuildState {
   color: string
@@ -125,6 +125,8 @@ async function checkForChanges(): Promise<void> {
       try { cb(globalStatus) } catch { /* ignore */ }
     }
 
+    const favorites = new Set(getFavorites())
+
     for (const item of items) {
       const key = item.fullname
       const prev = previousStates.get(key)
@@ -132,34 +134,33 @@ async function checkForChanges(): Promise<void> {
       const currentBuildNum = item.lastBuild?.number ?? null
 
       if (!prev) {
-        // First time seeing this job — just record state, don't notify
         previousStates.set(key, { color: currentColor, lastBuildNumber: currentBuildNum })
         continue
       }
 
-      // Detect state transition: a build finished (was running, now has result)
       const wasRunning = prev.color?.endsWith('_anime')
       const isNowDone = !currentColor.endsWith('_anime')
       const buildChanged = currentBuildNum !== null && currentBuildNum !== prev.lastBuildNumber
 
       if ((wasRunning && isNowDone) || (buildChanged && isNowDone)) {
-        const resultLabel = buildResultLabel(currentColor)
-        if (resultLabel) {
-          const emoji =
-            resultLabel === 'SUCCESS'
-              ? '✅'
-              : resultLabel === 'FAILED'
-                ? '❌'
-                : resultLabel === 'UNSTABLE'
-                  ? '⚠️'
-                  : '⏹️'
-          showNotification(
-            `${emoji} Build ${resultLabel}`,
-            `${shortName(key)} #${currentBuildNum}`
-          )
-          // Play sound for failures
-          if (resultLabel === 'FAILED' || resultLabel === 'UNSTABLE') {
-            playFailureSound()
+        if (favorites.has(key)) {
+          const resultLabel = buildResultLabel(currentColor)
+          if (resultLabel) {
+            const emoji =
+              resultLabel === 'SUCCESS'
+                ? '✅'
+                : resultLabel === 'FAILED'
+                  ? '❌'
+                  : resultLabel === 'UNSTABLE'
+                    ? '⚠️'
+                    : '⏹️'
+            showNotification(
+              `${emoji} Build ${resultLabel}`,
+              `${shortName(key)} #${currentBuildNum}`
+            )
+            if (resultLabel === 'FAILED' || resultLabel === 'UNSTABLE') {
+              playFailureSound()
+            }
           }
         }
       }
@@ -179,8 +180,8 @@ async function checkPendingInputs(items: JenkinsItem[]): Promise<void> {
   if (!client) return
 
   // Only check builds that are currently paused (PAUSED_PENDING_INPUT shows as blue_anime or similar)
-  const runningItems = items.filter((item) => item.color?.endsWith('_anime'))
-
+  const favorites = new Set(getFavorites())
+  const runningItems = items.filter((item) => item.color?.endsWith('_anime') && favorites.has(item.fullname))
   for (const item of runningItems) {
     if (!item.lastBuild) continue
     try {
