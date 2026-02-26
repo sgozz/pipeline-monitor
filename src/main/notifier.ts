@@ -47,13 +47,16 @@ function getApi(): JenkinsAPI | null {
   return api
 }
 
-function showNotification(title: string, body: string): void {
+function showNotification(title: string, body: string, navigateTo?: string): void {
   if (!getSettings().showNotifications) return
   const notification = new Notification({ title, body })
   notification.on('click', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show()
       mainWindow.focus()
+      if (navigateTo) {
+        mainWindow.webContents.send('navigate', navigateTo)
+      }
     }
   })
   notification.show()
@@ -156,7 +159,8 @@ async function checkForChanges(): Promise<void> {
                     : '⏹️'
             showNotification(
               `${emoji} Build ${resultLabel}`,
-              `${shortName(key)} #${currentBuildNum}`
+              `${shortName(key)} #${currentBuildNum}`,
+              `job:${key}`
             )
             if (resultLabel === 'FAILED' || resultLabel === 'UNSTABLE') {
               playFailureSound()
@@ -192,7 +196,8 @@ async function checkPendingInputs(items: JenkinsItem[]): Promise<void> {
           notifiedInputs.add(inputKey)
           showNotification(
             '⏸️ Input Required',
-            `${shortName(item.fullname)} #${item.lastBuild.number}: ${input.message}`
+            `${shortName(item.fullname)} #${item.lastBuild.number}: ${input.message}`,
+            `job:${item.fullname}`
           )
           // Notify renderer about pending input
           if (mainWindow && !mainWindow.isDestroyed()) {

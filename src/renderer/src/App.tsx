@@ -52,6 +52,7 @@ export default function App() {
     window.api.getVersion().then(setAppVersion)
     window.api.onNavigate((target) => {
       if (target === 'settings') setPage({ id: 'settings' })
+      else if (target.startsWith('job:')) setPage({ id: 'job', fullname: target.slice(4) })
     })
   }, [])
 

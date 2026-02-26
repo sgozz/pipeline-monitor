@@ -17,6 +17,7 @@ import { colorToStatus, groupHierarchically, sortFolderGroups, sortJobsByStatus 
 import BuildParamsDialog from './BuildParamsDialog'
 import FailedTestsInline from './FailedTestsInline'
 import BuildCommitsInline from './BuildCommitsInline'
+import PendingInputInline from './PendingInputInline'
 
 type StatusFilter = 'all' | 'failed' | 'running' | 'unstable' | 'success'
 
@@ -324,6 +325,7 @@ export default function Dashboard({ onOpenJob, searchInputRef }: Props) {
                 <div>
                   {favoriteItems.map((item) => {
                     const base = item.color?.replace('_anime', '') || 'notbuilt'
+                    const isRunning = item.color?.endsWith('_anime')
                     const hasFailed = base === 'red' || base === 'yellow'
                     return (
                       <div key={`fav-${item.fullname}`}>
@@ -339,6 +341,12 @@ export default function Dashboard({ onOpenJob, searchInputRef }: Props) {
                         />
                         {item.lastBuild && (
                           <BuildCommitsInline
+                            fullname={item.fullname}
+                            buildNumber={item.lastBuild.number}
+                          />
+                        )}
+                        {isRunning && item.lastBuild && (
+                          <PendingInputInline
                             fullname={item.fullname}
                             buildNumber={item.lastBuild.number}
                           />
