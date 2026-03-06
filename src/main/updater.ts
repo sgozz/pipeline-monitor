@@ -11,6 +11,7 @@ export interface UpdateStatus {
 
 let currentStatus: UpdateStatus = { status: 'idle' }
 let mainWindow: BrowserWindow | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 function sendStatus(status: UpdateStatus): void {
   currentStatus = status
@@ -63,7 +64,7 @@ export function initAutoUpdater(window: BrowserWindow): void {
   }, 5000)
 
   // Check periodically (every 30 minutes)
-  setInterval(
+  pollTimer = setInterval(
     () => {
       autoUpdater.checkForUpdates().catch(() => {})
     },
@@ -80,5 +81,12 @@ export function openDownloadPage(): void {
     shell.openExternal(currentStatus.downloadUrl)
   } else {
     shell.openExternal('https://github.com/sgozz/pipeline-monitor/releases/latest')
+  }
+}
+
+export function stopUpdater(): void {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }

@@ -3,8 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
 import { isConfigured, getSettings } from './store'
-import { initAutoUpdater } from './updater'
-import { initNotifier, onBuildStateChange } from './notifier'
+import { initAutoUpdater, stopUpdater } from './updater'
+import { initNotifier, onBuildStateChange, stopNotifier } from './notifier'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -208,6 +208,8 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   app.isQuitting = true
+  stopNotifier()
+  stopUpdater()
 })
 
 app.on('window-all-closed', () => {

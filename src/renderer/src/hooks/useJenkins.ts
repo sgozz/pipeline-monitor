@@ -58,21 +58,23 @@ export function usePolling<T>(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const fetchRef = useRef(fetchFn)
+  const hasDataRef = useRef(false)
   const appVisible = useAppVisible()
   fetchRef.current = fetchFn
 
   const refresh = useCallback(async () => {
     try {
-      setLoading((prev) => (data === null ? true : prev))
+      if (!hasDataRef.current) setLoading(true)
       const result = await fetchRef.current()
       setData(result)
+      hasDataRef.current = true
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }, [data])
+  }, [])
 
   useEffect(() => {
     if (!enabled || intervalMs <= 0) return

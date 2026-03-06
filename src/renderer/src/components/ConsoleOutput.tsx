@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { ArrowLeft, ArrowDown, ArrowUp, RefreshCw, Copy, Check, Search, X } from 'lucide-react'
 import { ansiToHtml, parseFullname } from '../lib/utils'
-
+import { usePolling } from '../hooks/useJenkins'
 interface Props {
   fullname: string
   buildNumber: number
@@ -9,34 +9,42 @@ interface Props {
 }
 
 export default function ConsoleOutput({ fullname, buildNumber, onBack }: Props) {
-  const [output, setOutput] = useState<string>('')
-  const [loading, setLoading] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [buildDone, setBuildDone] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [matchIndex, setMatchIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const scrollRafRef = useRef<number>(0)
+  const prevOutputRef = useRef<string>('')
+  const unchangedCountRef = useRef(0)
   const { name } = parseFullname(fullname)
 
-  const fetchOutput = async () => {
-    try {
-      const text = await window.api.jenkins.getConsoleOutput(fullname, buildNumber)
-      setOutput(text)
-    } catch (err) {
-      setOutput(`Error fetching console output: ${err}`)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Use usePolling for visibility-awareness; stop when build is done
+  const { data: output, loading, refresh } = usePolling(
+    () => window.api.jenkins.getConsoleOutput(fullname, buildNumber),
+    buildDone ? 0 : 10000,
+    !buildDone
+  )
 
+  // Detect build completion: output contains terminal line or stops changing
   useEffect(() => {
-    fetchOutput()
-    // Poll for updates if build might still be running
-    const timer = setInterval(fetchOutput, 5000)
-    return () => clearInterval(timer)
-  }, [fullname, buildNumber])
+    if (output === null) return
+    const finished = /Finished: (SUCCESS|FAILURE|UNSTABLE|ABORTED|NOT_BUILT)\s*$/.test(output)
+    if (finished) {
+      setBuildDone(true)
+      return
+    }
+    if (output === prevOutputRef.current) {
+      unchangedCountRef.current++
+      if (unchangedCountRef.current >= 3) setBuildDone(true)
+    } else {
+      unchangedCountRef.current = 0
+    }
+    prevOutputRef.current = output
+  }, [output])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -45,15 +53,20 @@ export default function ConsoleOutput({ fullname, buildNumber, onBack }: Props) 
     }
   }, [output, autoScroll, searchOpen])
 
+  // Throttled scroll handler (once per animation frame instead of 60+/sec)
   const handleScroll = () => {
-    if (!containerRef.current) return
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current
-    // Disable auto-scroll if user scrolled up more than 100px from bottom
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
+    if (scrollRafRef.current) return
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0
+      if (!containerRef.current) return
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current
+      const nearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setAutoScroll((prev) => (prev === nearBottom ? prev : nearBottom))
+    })
   }
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(output)
+    await navigator.clipboard.writeText(output ?? '')
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -66,6 +79,7 @@ export default function ConsoleOutput({ fullname, buildNumber, onBack }: Props) 
   }
 
   // Search highlighting
+  // Search highlighting — memoize HTML conversion (expensive for large outputs)
   const matchCount = useMemo(() => {
     if (!searchQuery || !output) return 0
     try {
@@ -77,7 +91,7 @@ export default function ConsoleOutput({ fullname, buildNumber, onBack }: Props) 
   }, [output, searchQuery])
 
   const highlightedHtml = useMemo(() => {
-    const baseHtml = ansiToHtml(output)
+    const baseHtml = ansiToHtml(output ?? '')
     if (!searchQuery) return baseHtml
     try {
       const escaped = escapeRegex(searchQuery)
@@ -161,7 +175,7 @@ export default function ConsoleOutput({ fullname, buildNumber, onBack }: Props) 
             {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
           </button>
           <button
-            onClick={fetchOutput}
+            onClick={refresh}
             className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition"
             title="Refresh"
           >

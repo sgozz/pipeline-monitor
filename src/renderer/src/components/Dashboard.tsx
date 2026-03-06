@@ -180,7 +180,7 @@ export default function Dashboard({ onOpenJob, searchInputRef }: Props) {
   )
 
   // Auto-expand all folders and jobs when searching
-  useMemo(() => {
+  useEffect(() => {
     if (debouncedSearch || statusFilter !== 'all') {
       setExpandedFolders(new Set(sortedGroups.map((g) => g.folder)))
       const allJobKeys = new Set<string>()
